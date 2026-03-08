@@ -24,6 +24,13 @@ from apr_twin.config import (
 )
 from apr_twin.schemas import TwinState
 from apr_twin.storage.parquet_io import read_parquet_file
+from apr_twin.twin.taxonomy import (
+    HYDRAULIC_HIGH_RISK_REASON_CODES,
+    HYDRAULIC_MEDIUM_RISK_REASON_CODES,
+    ReasonCode,
+    derive_main_root_cause,
+    recommendation_for_root_cause,
+)
 
 LOGGER = logging.getLogger(__name__)
 
