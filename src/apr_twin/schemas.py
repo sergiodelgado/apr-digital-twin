@@ -54,6 +54,16 @@ class DailyKPIRecord(BaseModel):
     risk_level: Literal["LOW", "MEDIUM", "HIGH"]
 
 
+class AvailableAPRRecord(BaseModel):
+    apr_id: str
+    telemetry_records: int
+    kpi_records: int
+    first_telemetry_timestamp: datetime | None = None
+    last_telemetry_timestamp: datetime | None = None
+    first_kpi_date: date | None = None
+    last_kpi_date: date | None = None
+
+
 class TwinState(BaseModel):
     timestamp: datetime = Field(description="Last telemetry timestamp used for the twin state.")
     apr_id: str

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import logging
+from datetime import date, datetime
 from typing import Any
 
 import pandas as pd
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
 
 from apr_twin.config import ensure_data_dirs
-from apr_twin.schemas import DailyKPIRecord, HealthResponse, TelemetryRecord, TwinState
+from apr_twin.schemas import AvailableAPRRecord, DailyKPIRecord, HealthResponse, TelemetryRecord, TwinState
 from apr_twin.storage.parquet_io import read_parquet_file
 from apr_twin.twin.engine import compute_current_state
 from apr_twin.utils.logging_utils import configure_logging
@@ -16,6 +17,18 @@ configure_logging()
 LOGGER = logging.getLogger(__name__)
 
 app = FastAPI(title="APR Digital Twin API", version="0.1.0")
+
+
+def _as_naive_timestamp(value: datetime | date) -> pd.Timestamp:
+    ts = pd.Timestamp(value)
+    if ts.tz is not None:
+        ts = ts.tz_convert(None)
+    return ts
+
+
+def _validate_range(start: datetime | date | None, end: datetime | date | None) -> None:
+    if start is not None and end is not None and end < start:
+        raise HTTPException(status_code=400, detail="Invalid range: end must be greater than or equal to start.")
 
 
 def _load_silver() -> pd.DataFrame:
@@ -60,6 +73,47 @@ def _load_gold_daily() -> pd.DataFrame:
     return df.dropna(subset=["date"])
 
 
+@app.get("/aprs/available", response_model=list[AvailableAPRRecord])
+def aprs_available() -> list[AvailableAPRRecord]:
+    silver_df = _load_silver()
+    gold_df = _load_gold_daily()
+
+    apr_ids: set[str] = set()
+    if not silver_df.empty:
+        apr_ids.update(silver_df["apr_id"].dropna().astype(str).str.strip())
+    if not gold_df.empty:
+        apr_ids.update(gold_df["apr_id"].dropna().astype(str).str.strip())
+    apr_ids.discard("")
+
+    results: list[AvailableAPRRecord] = []
+    for apr_id in sorted(apr_ids):
+        silver_apr = silver_df[silver_df["apr_id"] == apr_id] if not silver_df.empty else pd.DataFrame()
+        gold_apr = gold_df[gold_df["apr_id"] == apr_id] if not gold_df.empty else pd.DataFrame()
+
+        first_telemetry = (
+            pd.Timestamp(silver_apr["timestamp"].min()).to_pydatetime() if not silver_apr.empty else None
+        )
+        last_telemetry = (
+            pd.Timestamp(silver_apr["timestamp"].max()).to_pydatetime() if not silver_apr.empty else None
+        )
+        first_kpi_date = pd.Timestamp(gold_apr["date"].min()).date() if not gold_apr.empty else None
+        last_kpi_date = pd.Timestamp(gold_apr["date"].max()).date() if not gold_apr.empty else None
+
+        results.append(
+            AvailableAPRRecord(
+                apr_id=apr_id,
+                telemetry_records=int(len(silver_apr)),
+                kpi_records=int(len(gold_apr)),
+                first_telemetry_timestamp=first_telemetry,
+                last_telemetry_timestamp=last_telemetry,
+                first_kpi_date=first_kpi_date,
+                last_kpi_date=last_kpi_date,
+            )
+        )
+
+    return results
+
+
 @app.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     cfg = ensure_data_dirs()
@@ -82,13 +136,20 @@ def health() -> HealthResponse:
 def telemetry_recent(
     limit: int = Query(default=200, ge=1, le=5000),
     apr_id: str | None = None,
+    start: datetime | None = Query(default=None),
+    end: datetime | None = Query(default=None),
 ) -> list[TelemetryRecord]:
+    _validate_range(start=start, end=end)
     df = _load_silver()
     if df.empty:
         return []
 
     if apr_id:
         df = df[df["apr_id"] == apr_id]
+    if start is not None:
+        df = df[df["timestamp"] >= _as_naive_timestamp(start)]
+    if end is not None:
+        df = df[df["timestamp"] <= _as_naive_timestamp(end)]
     if df.empty:
         return []
 
@@ -120,18 +181,27 @@ def telemetry_recent(
 def kpis_daily(
     days: int = Query(default=14, ge=1, le=365),
     apr_id: str | None = None,
+    start: date | None = Query(default=None),
+    end: date | None = Query(default=None),
 ) -> list[DailyKPIRecord]:
+    _validate_range(start=start, end=end)
     df = _load_gold_daily()
     if df.empty:
         return []
 
     if apr_id:
         df = df[df["apr_id"] == apr_id]
+    if start is not None:
+        df = df[df["date"] >= _as_naive_timestamp(start).floor("D")]
+    if end is not None:
+        df = df[df["date"] <= _as_naive_timestamp(end).floor("D")]
     if df.empty:
         return []
 
-    cutoff = pd.Timestamp.now().floor("D") - pd.Timedelta(days=days - 1)
-    df = df[df["date"] >= cutoff].sort_values("date")
+    if start is None and end is None:
+        cutoff = pd.Timestamp.now().floor("D") - pd.Timedelta(days=days - 1)
+        df = df[df["date"] >= cutoff]
+    df = df.sort_values("date")
     results: list[DailyKPIRecord] = []
     for row in df.to_dict(orient="records"):
         results.append(
