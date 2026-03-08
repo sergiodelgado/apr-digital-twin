@@ -20,6 +20,7 @@ data/
   bronze/
   silver/
   gold/
+pyproject.toml
 scripts/
   run_mvp.py
 src/
@@ -39,7 +40,7 @@ tests/
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+python -m pip install -e .
 ```
 
 ## Run local batch flow
@@ -57,7 +58,7 @@ This command generates telemetry and produces:
 ## Start API
 
 ```powershell
-python -m uvicorn apr_twin.api.main:app --reload --port 8000
+uvicorn apr_twin.api.main:app --reload --port 8000
 ```
 
 ## Start dashboard

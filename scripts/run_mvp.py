@@ -6,12 +6,18 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+SRC_ROOT = REPO_ROOT / "src"
 
-from apr_twin.pipelines.run_pipeline import run_local_batch
-from apr_twin.twin.engine import compute_current_state
-from apr_twin.utils.logging_utils import configure_logging
+try:
+    from apr_twin.pipelines.run_pipeline import run_local_batch
+    from apr_twin.twin.engine import compute_current_state
+    from apr_twin.utils.logging_utils import configure_logging
+except ModuleNotFoundError:
+    if str(SRC_ROOT) not in sys.path:
+        sys.path.insert(0, str(SRC_ROOT))
+    from apr_twin.pipelines.run_pipeline import run_local_batch
+    from apr_twin.twin.engine import compute_current_state
+    from apr_twin.utils.logging_utils import configure_logging
 
 
 def main() -> None:
@@ -35,7 +41,7 @@ def main() -> None:
     print(f"Twin state:  {twin_state.system_status} | alerts={len(twin_state.active_alerts)}")
 
     print("\nStart API (separate process):")
-    print("python -m uvicorn apr_twin.api.main:app --reload --port 8000")
+    print("uvicorn apr_twin.api.main:app --reload --port 8000")
     print("\nStart Dashboard (separate process):")
     print("python -m streamlit run src/apr_twin/dashboard/app.py")
 
