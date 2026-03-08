@@ -1,10 +1,10 @@
 {
-  "batch_id": "batch-f824a39e4ae6",
+  "batch_id": "batch-746f3d23b28a",
   "metrics": {
-    "duplicates_removed": 5742,
-    "imputed_pct_of_silver": 1.7706,
-    "imputed_rows": 138,
-    "input_rows": 13536,
+    "duplicates_removed": 6310,
+    "imputed_pct_of_silver": 1.7431,
+    "imputed_rows": 136,
+    "input_rows": 14112,
     "invalid_timestamp_rows": 0,
     "max_interpolation_gap_minutes": 45.0,
     "max_interpolation_steps": 6,
@@ -13,15 +13,15 @@
     "out_of_range_counts": {
       "flow_lps": 0,
       "pressure_bar": 19,
-      "tank_level_pct": 29,
+      "tank_level_pct": 30,
       "turbidity_ntu": 0
     },
-    "rejected_rows": 5742,
-    "rejection_rate_pct": 42.4202,
-    "silver_rows": 7794,
+    "rejected_rows": 6310,
+    "rejection_rate_pct": 44.7137,
+    "silver_rows": 7802,
     "unresolved_rows_after_imputation": 0
   },
-  "processed_at": "2026-03-08T02:54:46+00:00",
+  "processed_at": "2026-03-08T03:13:04+00:00",
   "source_files": [
     "telemetry_raw_20260307_214100.parquet",
     "telemetry_raw_20260307_214154.parquet",
@@ -33,6 +33,7 @@
     "telemetry_raw_20260307_231217.parquet",
     "telemetry_raw_20260307_232330.parquet",
     "telemetry_raw_20260307_233332.parquet",
-    "telemetry_raw_20260307_235446.parquet"
+    "telemetry_raw_20260307_235446.parquet",
+    "telemetry_raw_20260308_001304.parquet"
   ]
 }

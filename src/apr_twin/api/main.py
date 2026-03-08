@@ -73,8 +73,7 @@ def _load_gold_daily() -> pd.DataFrame:
     return df.dropna(subset=["date"])
 
 
-@app.get("/aprs/available", response_model=list[AvailableAPRRecord])
-def aprs_available() -> list[AvailableAPRRecord]:
+def _build_available_aprs() -> list[AvailableAPRRecord]:
     silver_df = _load_silver()
     gold_df = _load_gold_daily()
 
@@ -112,6 +111,16 @@ def aprs_available() -> list[AvailableAPRRecord]:
         )
 
     return results
+
+
+@app.get("/available_aprs", response_model=list[AvailableAPRRecord])
+def available_aprs() -> list[AvailableAPRRecord]:
+    return _build_available_aprs()
+
+
+@app.get("/aprs/available", response_model=list[AvailableAPRRecord])
+def aprs_available() -> list[AvailableAPRRecord]:
+    return _build_available_aprs()
 
 
 @app.get("/health", response_model=HealthResponse)

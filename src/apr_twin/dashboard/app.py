@@ -110,12 +110,20 @@ def load_local_base_data() -> tuple[pd.DataFrame, pd.DataFrame]:
 
 @st.cache_data(ttl=15)
 def load_api_aprs(base_url: str) -> list[dict[str, Any]]:
-    response = requests.get(f"{base_url}/aprs/available", timeout=20)
-    response.raise_for_status()
-    payload = response.json()
-    if not isinstance(payload, list):
-        return []
-    return [row for row in payload if isinstance(row, dict)]
+    last_exception: Exception | None = None
+    for path in ("/available_aprs", "/aprs/available"):
+        try:
+            response = requests.get(f"{base_url}{path}", timeout=20)
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, list):
+                return []
+            return [row for row in payload if isinstance(row, dict)]
+        except Exception as exc:  # noqa: BLE001
+            last_exception = exc
+    if last_exception is not None:
+        raise last_exception
+    return []
 
 
 @st.cache_data(ttl=15)
@@ -261,11 +269,40 @@ low_pressure_events = int((silver["pressure_bar"] < PRESSURE_MIN_BAR).sum()) if 
 high_turbidity_events = int((silver["turbidity_ntu"] > TURBIDITY_ALERT_NTU).sum()) if not silver.empty else 0
 low_tank_events = int((silver["tank_level_pct"] < TANK_LOW_PCT).sum()) if not silver.empty else 0
 
+low_pressure_active = isinstance(pressure_value, (int, float)) and pressure_value < PRESSURE_MIN_BAR
+high_turbidity_active = isinstance(turbidity_value, (int, float)) and turbidity_value > TURBIDITY_ALERT_NTU
+low_tank_active = isinstance(tank_value, (int, float)) and tank_value < TANK_LOW_PCT
+stale_data_active = freshness in {"STALE", "OUTDATED"}
+
+stale_detail = freshness_caption
+if isinstance(data_age, (int, float)):
+    stale_detail = f"{freshness} ({data_age:.1f} min)"
+
 alert_col_1, alert_col_2, alert_col_3, alert_col_4 = st.columns(4)
-alert_col_1.metric("Active alerts", len(alerts))
-alert_col_2.metric("Low pressure events", low_pressure_events)
-alert_col_3.metric("High turbidity events", high_turbidity_events)
-alert_col_4.metric("Low tank events", low_tank_events)
+alert_col_1.metric(
+    "Low pressure",
+    "ALERT" if low_pressure_active else "OK",
+    f"{low_pressure_events} events in range",
+    delta_color="inverse",
+)
+alert_col_2.metric(
+    "High turbidity",
+    "ALERT" if high_turbidity_active else "OK",
+    f"{high_turbidity_events} events in range",
+    delta_color="inverse",
+)
+alert_col_3.metric(
+    "Tank low",
+    "ALERT" if low_tank_active else "OK",
+    f"{low_tank_events} events in range",
+    delta_color="inverse",
+)
+alert_col_4.metric(
+    "Stale data",
+    "ALERT" if stale_data_active else "OK",
+    stale_detail,
+    delta_color="inverse",
+)
 if alerts:
     st.warning(" | ".join(alerts[:4]))
 else:

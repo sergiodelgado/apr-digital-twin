@@ -24,7 +24,7 @@ def test_api_endpoints(monkeypatch, tmp_path: Path) -> None:
     assert health.status_code == 200
     assert health.json()["status"] in {"ok", "warning"}
 
-    aprs = client.get("/aprs/available")
+    aprs = client.get("/available_aprs")
     assert aprs.status_code == 200
     aprs_payload = aprs.json()
     assert isinstance(aprs_payload, list)
@@ -36,6 +36,10 @@ def test_api_endpoints(monkeypatch, tmp_path: Path) -> None:
     assert "kpi_records" in first_apr
     assert "first_telemetry_timestamp" in first_apr
     assert "last_telemetry_timestamp" in first_apr
+
+    aprs_legacy = client.get("/aprs/available")
+    assert aprs_legacy.status_code == 200
+    assert aprs_legacy.json() == aprs_payload
 
     telemetry = client.get("/telemetry/recent", params={"limit": 5000, "apr_id": "APR-API"})
     assert telemetry.status_code == 200
