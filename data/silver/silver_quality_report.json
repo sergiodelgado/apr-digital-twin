@@ -1,0 +1,23 @@
+{
+  "generated_at_utc": "2026-03-08T01:01:53.180022+00:00",
+  "source_bronze_dir": "C:\\Users\\ASUS\\Projects\\apr-digital-twin\\data\\bronze",
+  "input_rows": 2304,
+  "silver_rows": 1152,
+  "rejected_rows": 1152,
+  "rejection_rate_pct": 50.0,
+  "duplicates_removed": 1152,
+  "unresolved_rows_after_imputation": 0,
+  "imputed_rows": 15,
+  "imputed_pct_of_silver": 1.3021,
+  "max_interpolation_gap_minutes": 45.0,
+  "max_interpolation_steps": 6,
+  "invalid_timestamp_rows": 0,
+  "missing_apr_rows": 0,
+  "missing_sensor_rows": 0,
+  "out_of_range_counts": {
+    "flow_lps": 0,
+    "pressure_bar": 1,
+    "tank_level_pct": 3,
+    "turbidity_ntu": 0
+  }
+}
