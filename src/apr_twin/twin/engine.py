@@ -264,8 +264,10 @@ def compute_current_state(apr_id: str | None = None) -> TwinState:
     if tank_critical:
         _append_reason(reason_codes, "TANK_CRITICAL")
     if projected_tank_low:
+        alerts.append("Projected low tank level in 2 hours")
         _append_reason(reason_codes, "PROJECTED_TANK_LOW_2H")
     if projected_tank_critical:
+        alerts.append("Projected critical tank level in 2 hours")
         _append_reason(reason_codes, "PROJECTED_TANK_CRITICAL_2H")
 
     if turbidity_high:
