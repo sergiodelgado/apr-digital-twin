@@ -75,6 +75,10 @@ class TwinState(BaseModel):
     daily_volume_m3: float | None = None
     data_age_minutes: float | None = None
     freshness_status: Literal["FRESH", "STALE", "OUTDATED", "NO_DATA"] = "NO_DATA"
-    confidence: float = 0.0
+    confidence: Literal["LOW", "MEDIUM", "HIGH"] = "LOW"
+    confidence_score: float = 0.0
+    projected_tank_level_2h_pct: float | None = None
+    reason_codes: list[str] = Field(default_factory=list)
+    operational_recommendation: str | None = None
     turbidity_alert_active: bool = False
     active_alerts: list[str] = Field(default_factory=list)

@@ -107,5 +107,12 @@ def test_api_endpoints(monkeypatch, tmp_path: Path) -> None:
     twin_payload = twin.json()
     assert twin_payload["system_status"] in {"OK", "WARNING", "CRITICAL", "NO_DATA"}
     assert twin_payload["freshness_status"] in {"FRESH", "STALE", "OUTDATED", "NO_DATA"}
+    assert twin_payload["confidence"] in {"LOW", "MEDIUM", "HIGH"}
+    assert isinstance(twin_payload["confidence_score"], float)
+    assert 0.0 <= twin_payload["confidence_score"] <= 1.0
+    assert "reason_codes" in twin_payload
+    assert isinstance(twin_payload["reason_codes"], list)
+    assert "projected_tank_level_2h_pct" in twin_payload
+    assert "operational_recommendation" in twin_payload
     assert "data_age_minutes" in twin_payload
 

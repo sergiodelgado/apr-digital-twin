@@ -70,6 +70,10 @@ def test_end_to_end_pipeline_with_quality_outputs(monkeypatch, tmp_path: Path) -
     assert state.system_status in {"OK", "WARNING", "CRITICAL"}
     assert state.current_pressure_bar is not None
     assert state.freshness_status in {"FRESH", "STALE", "OUTDATED", "NO_DATA"}
+    assert state.confidence in {"LOW", "MEDIUM", "HIGH"}
+    assert 0.0 <= state.confidence_score <= 1.0
+    assert isinstance(state.reason_codes, list)
+    assert state.operational_recommendation is not None
 
 
 def test_multi_sensor_dedup_preserves_valid_rows(monkeypatch, tmp_path: Path) -> None:
@@ -235,7 +239,10 @@ def test_twin_freshness_degrades_state(monkeypatch, tmp_path: Path) -> None:
     assert state.freshness_status == "OUTDATED"
     assert state.data_age_minutes is not None and state.data_age_minutes >= 120
     assert state.system_status == "CRITICAL"
-    assert state.confidence <= 0.5
+    assert state.confidence_score <= 0.5
+    assert state.confidence in {"LOW", "MEDIUM"}
+    assert "FRESHNESS_OUTDATED" in state.reason_codes
+    assert state.operational_recommendation is not None
 
 
 def test_batch_lineage_and_quality_metrics_stability(monkeypatch, tmp_path: Path) -> None:

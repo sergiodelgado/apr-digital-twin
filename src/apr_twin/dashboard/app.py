@@ -391,7 +391,8 @@ def _build_operational_recommendation(
 ) -> dict[str, str]:
     status = str(twin.get("system_status", "NO_DATA"))
     freshness = str(twin.get("freshness_status", "NO_DATA"))
-    confidence = float(twin.get("confidence", 0.0)) if _is_number(twin.get("confidence")) else 0.0
+    confidence_raw = twin.get("confidence_score", twin.get("confidence", 0.0))
+    confidence = float(confidence_raw) if _is_number(confidence_raw) else 0.0
     data_age = float(twin.get("data_age_minutes")) if _is_number(twin.get("data_age_minutes")) else None
 
     critical_cards = [card["title"] for card in alert_summaries if card["max_severity"] == "CRITICAL"]

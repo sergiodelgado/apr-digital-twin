@@ -1,10 +1,10 @@
 {
-  "batch_id": "batch-cc15eaa41c7e",
+  "batch_id": "batch-be199ccbbc83",
   "metrics": {
-    "duplicates_removed": 14196,
-    "imputed_pct_of_silver": 1.6354,
-    "imputed_rows": 220,
-    "input_rows": 27648,
+    "duplicates_removed": 20232,
+    "imputed_pct_of_silver": 1.6711,
+    "imputed_rows": 225,
+    "input_rows": 33696,
     "invalid_timestamp_rows": 0,
     "max_interpolation_gap_minutes": 45.0,
     "max_interpolation_steps": 6,
@@ -12,16 +12,16 @@
     "missing_sensor_rows": 0,
     "out_of_range_counts": {
       "flow_lps": 0,
-      "pressure_bar": 28,
-      "tank_level_pct": 68,
+      "pressure_bar": 31,
+      "tank_level_pct": 67,
       "turbidity_ntu": 0
     },
-    "rejected_rows": 14196,
-    "rejection_rate_pct": 51.3455,
-    "silver_rows": 13452,
+    "rejected_rows": 20232,
+    "rejection_rate_pct": 60.0427,
+    "silver_rows": 13464,
     "unresolved_rows_after_imputation": 0
   },
-  "processed_at": "2026-03-08T07:41:53+00:00",
+  "processed_at": "2026-03-08T08:05:07+00:00",
   "source_files": [
     "telemetry_raw_20260307_214100.parquet",
     "telemetry_raw_20260307_214154.parquet",
@@ -41,6 +41,9 @@
     "telemetry_raw_20260308_042736.parquet",
     "telemetry_raw_20260308_044015.parquet",
     "telemetry_raw_20260308_044108.parquet",
-    "telemetry_raw_20260308_044153.parquet"
+    "telemetry_raw_20260308_044153.parquet",
+    "telemetry_raw_20260308_045949.parquet",
+    "telemetry_raw_20260308_050036.parquet",
+    "telemetry_raw_20260308_050507.parquet"
   ]
 }
