@@ -4,14 +4,14 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from src.apr_twin.pipelines.run_pipeline import run_local_batch
+from apr_twin.pipelines.run_pipeline import run_local_batch
 
 
 def test_api_endpoints(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("APR_DATA_DIR", str(tmp_path / "data"))
     run_local_batch(days=2, freq_minutes=5, apr_id="APR-API")
 
-    from src.apr_twin.api.main import app
+    from apr_twin.api.main import app
 
     client = TestClient(app)
 
@@ -47,3 +47,4 @@ def test_api_endpoints(monkeypatch, tmp_path: Path) -> None:
     assert twin_payload["system_status"] in {"OK", "WARNING", "CRITICAL", "NO_DATA"}
     assert twin_payload["freshness_status"] in {"FRESH", "STALE", "OUTDATED", "NO_DATA"}
     assert "data_age_minutes" in twin_payload
+

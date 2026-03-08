@@ -5,7 +5,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from src.apr_twin.config import (
+from apr_twin.config import (
     FRESHNESS_FRESH_MAX_MINUTES,
     FRESHNESS_STALE_MAX_MINUTES,
     PRESSURE_MIN_BAR,
@@ -15,8 +15,8 @@ from src.apr_twin.config import (
     TURBIDITY_CRITICAL_NTU,
     ensure_data_dirs,
 )
-from src.apr_twin.schemas import TwinState
-from src.apr_twin.storage.parquet_io import read_parquet_file
+from apr_twin.schemas import TwinState
+from apr_twin.storage.parquet_io import read_parquet_file
 
 LOGGER = logging.getLogger(__name__)
 
@@ -142,4 +142,5 @@ def compute_current_state(apr_id: str | None = None) -> TwinState:
         turbidity_alert_active=current_turbidity > TURBIDITY_ALERT_NTU,
         active_alerts=alerts,
     )
+
 

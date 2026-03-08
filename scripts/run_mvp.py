@@ -9,9 +9,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.apr_twin.pipelines.run_pipeline import run_local_batch
-from src.apr_twin.twin.engine import compute_current_state
-from src.apr_twin.utils.logging_utils import configure_logging
+from apr_twin.pipelines.run_pipeline import run_local_batch
+from apr_twin.twin.engine import compute_current_state
+from apr_twin.utils.logging_utils import configure_logging
 
 
 def main() -> None:
@@ -35,10 +35,11 @@ def main() -> None:
     print(f"Twin state:  {twin_state.system_status} | alerts={len(twin_state.active_alerts)}")
 
     print("\nStart API (separate process):")
-    print("python -m uvicorn src.apr_twin.api.main:app --reload --port 8000")
+    print("python -m uvicorn apr_twin.api.main:app --reload --port 8000")
     print("\nStart Dashboard (separate process):")
     print("python -m streamlit run src/apr_twin/dashboard/app.py")
 
 
 if __name__ == "__main__":
     main()
+

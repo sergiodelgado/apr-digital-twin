@@ -4,9 +4,9 @@ import argparse
 import logging
 from pathlib import Path
 
-from src.apr_twin.pipelines.bronze_to_silver import process_bronze_to_silver
-from src.apr_twin.pipelines.silver_to_gold import process_silver_to_gold
-from src.apr_twin.synthetic.generator import generate_bronze_telemetry
+from apr_twin.pipelines.bronze_to_silver import process_bronze_to_silver
+from apr_twin.pipelines.silver_to_gold import process_silver_to_gold
+from apr_twin.synthetic.generator import generate_bronze_telemetry
 
 LOGGER = logging.getLogger(__name__)
 
@@ -35,4 +35,5 @@ def main() -> None:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     main()
+
 

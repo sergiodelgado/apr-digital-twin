@@ -6,11 +6,11 @@ from typing import Any
 import pandas as pd
 from fastapi import FastAPI, Query
 
-from src.apr_twin.config import ensure_data_dirs
-from src.apr_twin.schemas import DailyKPIRecord, HealthResponse, TelemetryRecord, TwinState
-from src.apr_twin.storage.parquet_io import read_parquet_file
-from src.apr_twin.twin.engine import compute_current_state
-from src.apr_twin.utils.logging_utils import configure_logging
+from apr_twin.config import ensure_data_dirs
+from apr_twin.schemas import DailyKPIRecord, HealthResponse, TelemetryRecord, TwinState
+from apr_twin.storage.parquet_io import read_parquet_file
+from apr_twin.twin.engine import compute_current_state
+from apr_twin.utils.logging_utils import configure_logging
 
 configure_logging()
 LOGGER = logging.getLogger(__name__)
@@ -169,3 +169,4 @@ def twin_state(apr_id: str | None = None) -> TwinState:
 @app.get("/")
 def root() -> dict[str, Any]:
     return {"message": "APR Digital Twin API", "docs": "/docs"}
+

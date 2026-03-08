@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.apr_twin.config import ensure_data_dirs
-from src.apr_twin.pipelines.bronze_to_silver import process_bronze_to_silver
-from src.apr_twin.pipelines.silver_to_gold import process_silver_to_gold
-from src.apr_twin.storage.parquet_io import read_parquet_file, write_parquet
-from src.apr_twin.synthetic.generator import generate_bronze_telemetry
-from src.apr_twin.twin.engine import compute_current_state
+from apr_twin.config import ensure_data_dirs
+from apr_twin.pipelines.bronze_to_silver import process_bronze_to_silver
+from apr_twin.pipelines.silver_to_gold import process_silver_to_gold
+from apr_twin.storage.parquet_io import read_parquet_file, write_parquet
+from apr_twin.synthetic.generator import generate_bronze_telemetry
+from apr_twin.twin.engine import compute_current_state
 
 
 def _write_bronze(cfg_path: Path, rows: list[dict[str, object]]) -> None:
@@ -293,3 +293,4 @@ def test_batch_lineage_and_quality_metrics_stability(monkeypatch, tmp_path: Path
     assert set(gold_df["batch_id"].unique().tolist()) == {first_report["batch_id"]}
     assert set(gold_df["source_file"].unique().tolist()) == {"batch_a.parquet|batch_b.parquet"}
     assert gold_df["processed_at"].notna().all()
+

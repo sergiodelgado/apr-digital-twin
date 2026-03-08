@@ -8,8 +8,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from src.apr_twin.config import ensure_data_dirs
-from src.apr_twin.storage.parquet_io import read_parquet_file, write_parquet
+from apr_twin.config import ensure_data_dirs
+from apr_twin.storage.parquet_io import read_parquet_file, write_parquet
 
 LOGGER = logging.getLogger(__name__)
 
@@ -198,3 +198,4 @@ def main() -> None:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     main()
+

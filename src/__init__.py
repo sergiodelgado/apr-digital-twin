@@ -1,2 +1,3 @@
-"""Root package to support absolute imports via src.apr_twin."""
+"""Root package to support absolute imports via apr_twin."""
+
 

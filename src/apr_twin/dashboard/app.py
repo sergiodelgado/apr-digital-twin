@@ -7,10 +7,10 @@ import pandas as pd
 import requests
 import streamlit as st
 
-from src.apr_twin.config import TURBIDITY_ALERT_NTU, ensure_data_dirs
-from src.apr_twin.storage.parquet_io import read_parquet_file
-from src.apr_twin.twin.engine import compute_current_state
-from src.apr_twin.utils.logging_utils import configure_logging
+from apr_twin.config import TURBIDITY_ALERT_NTU, ensure_data_dirs
+from apr_twin.storage.parquet_io import read_parquet_file
+from apr_twin.twin.engine import compute_current_state
+from apr_twin.utils.logging_utils import configure_logging
 
 configure_logging()
 LOGGER = logging.getLogger(__name__)
@@ -118,4 +118,5 @@ if alerts_df.empty:
 else:
     cols = ["timestamp", "apr_id", "turbidity_ntu", "pressure_bar", "tank_level_pct"]
     st.dataframe(alerts_df[cols].sort_values("timestamp", ascending=False).head(50), use_container_width=True)
+
 

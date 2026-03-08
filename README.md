@@ -57,7 +57,7 @@ This command generates telemetry and produces:
 ## Start API
 
 ```powershell
-python -m uvicorn src.apr_twin.api.main:app --reload --port 8000
+python -m uvicorn apr_twin.api.main:app --reload --port 8000
 ```
 
 ## Start dashboard
@@ -79,4 +79,3 @@ Set `APR_DATA_DIR` to use another local data folder:
 ```powershell
 $env:APR_DATA_DIR = "C:\temp\apr-data"
 ```
-
