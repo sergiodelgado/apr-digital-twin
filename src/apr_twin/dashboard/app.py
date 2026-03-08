@@ -9,6 +9,8 @@ import requests
 import streamlit as st
 
 from apr_twin.config import (
+    FRESHNESS_FRESH_MAX_MINUTES,
+    FRESHNESS_STALE_MAX_MINUTES,
     PRESSURE_MAX_BAR,
     PRESSURE_MIN_BAR,
     TANK_CRITICAL_PCT,
@@ -25,7 +27,7 @@ configure_logging()
 LOGGER = logging.getLogger(__name__)
 
 st.set_page_config(page_title="APR Digital Twin", layout="wide")
-st.title("APR Digital Twin MVP")
+st.title("APR Operational Control Room")
 
 
 def _normalize_silver(df: pd.DataFrame) -> pd.DataFrame:
@@ -100,6 +102,351 @@ def _apply_local_filters(
     return s, g
 
 
+def _format_timestamp(value: Any) -> str:
+    ts = pd.to_datetime(value, errors="coerce")
+    if pd.isna(ts):
+        return "N/A"
+    return ts.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _format_minutes(value: float | None) -> str:
+    if value is None:
+        return "N/A"
+    return f"{value:.1f} min"
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not pd.isna(value)
+
+
+def _estimate_sampling_minutes(silver_df: pd.DataFrame) -> float | None:
+    if silver_df.empty or len(silver_df) < 2:
+        return None
+    diffs = silver_df.sort_values("timestamp")["timestamp"].diff().dropna().dt.total_seconds() / 60.0
+    if diffs.empty:
+        return None
+    return float(diffs.median())
+
+
+def _count_event_starts(condition: pd.Series) -> int:
+    if condition.empty:
+        return 0
+    cond = condition.fillna(False).astype(bool)
+    starts = cond & ~cond.shift(fill_value=False)
+    return int(starts.sum())
+
+
+def _classify_severity(any_warning: bool, any_critical: bool) -> str:
+    if any_critical:
+        return "CRITICAL"
+    if any_warning:
+        return "WARNING"
+    return "OK"
+
+
+def _sum_gold_duration(gold_df: pd.DataFrame, col_name: str) -> float | None:
+    if gold_df.empty or col_name not in gold_df.columns:
+        return None
+    series = pd.to_numeric(gold_df[col_name], errors="coerce").dropna()
+    if series.empty:
+        return None
+    return float(series.sum())
+
+
+def _build_alert_summaries(
+    silver_df: pd.DataFrame,
+    gold_df: pd.DataFrame,
+    pressure_value: float | None,
+    tank_value: float | None,
+    turbidity_value: float | None,
+    freshness: str,
+    data_age: float | None,
+) -> list[dict[str, str]]:
+    sampling_minutes = _estimate_sampling_minutes(silver_df)
+
+    if silver_df.empty:
+        pressure_cond = pd.Series(dtype=bool)
+        pressure_critical_cond = pd.Series(dtype=bool)
+        tank_cond = pd.Series(dtype=bool)
+        tank_critical_cond = pd.Series(dtype=bool)
+        turbidity_cond = pd.Series(dtype=bool)
+        turbidity_critical_cond = pd.Series(dtype=bool)
+        gaps_minutes = pd.Series(dtype=float)
+    else:
+        pressure_cond = silver_df["pressure_bar"] < PRESSURE_MIN_BAR
+        pressure_critical_cond = silver_df["pressure_bar"] < 1.0
+        tank_cond = silver_df["tank_level_pct"] < TANK_LOW_PCT
+        tank_critical_cond = silver_df["tank_level_pct"] <= TANK_CRITICAL_PCT
+        turbidity_cond = silver_df["turbidity_ntu"] > TURBIDITY_ALERT_NTU
+        turbidity_critical_cond = silver_df["turbidity_ntu"] >= TURBIDITY_CRITICAL_NTU
+        gaps_minutes = (
+            silver_df.sort_values("timestamp")["timestamp"].diff().dropna().dt.total_seconds() / 60.0
+        )
+
+    pressure_duration = _sum_gold_duration(gold_df, "low_pressure_duration_minutes")
+    if pressure_duration is None and sampling_minutes is not None:
+        pressure_duration = float(pressure_cond.sum()) * sampling_minutes
+
+    turbidity_duration = _sum_gold_duration(gold_df, "high_turbidity_duration_minutes")
+    if turbidity_duration is None and sampling_minutes is not None:
+        turbidity_duration = float(turbidity_cond.sum()) * sampling_minutes
+
+    tank_duration: float | None = None
+    if sampling_minutes is not None:
+        tank_duration = float(tank_cond.sum()) * sampling_minutes
+
+    freshness_event_count = int((gaps_minutes > FRESHNESS_FRESH_MAX_MINUTES).sum()) if not gaps_minutes.empty else 0
+    freshness_critical_seen = bool((gaps_minutes > FRESHNESS_STALE_MAX_MINUTES).any()) if not gaps_minutes.empty else False
+    freshness_warning_seen = bool((gaps_minutes > FRESHNESS_FRESH_MAX_MINUTES).any()) if not gaps_minutes.empty else False
+
+    pressure_summary = {
+        "title": "Pressure Stability",
+        "active_now": "ACTIVE" if _is_number(pressure_value) and pressure_value < PRESSURE_MIN_BAR else "CLEAR",
+        "events": str(_count_event_starts(pressure_cond)),
+        "max_severity": _classify_severity(bool(pressure_cond.any()), bool(pressure_critical_cond.any())),
+        "duration": _format_minutes(pressure_duration),
+    }
+    tank_summary = {
+        "title": "Tank Level",
+        "active_now": "ACTIVE" if _is_number(tank_value) and tank_value < TANK_LOW_PCT else "CLEAR",
+        "events": str(_count_event_starts(tank_cond)),
+        "max_severity": _classify_severity(bool(tank_cond.any()), bool(tank_critical_cond.any())),
+        "duration": _format_minutes(tank_duration),
+    }
+    turbidity_summary = {
+        "title": "Water Quality",
+        "active_now": "ACTIVE" if _is_number(turbidity_value) and turbidity_value > TURBIDITY_ALERT_NTU else "CLEAR",
+        "events": str(_count_event_starts(turbidity_cond)),
+        "max_severity": _classify_severity(bool(turbidity_cond.any()), bool(turbidity_critical_cond.any())),
+        "duration": _format_minutes(turbidity_duration),
+    }
+
+    freshness_peak_gap = float(gaps_minutes.max()) if not gaps_minutes.empty else None
+    freshness_duration_text = (
+        f"Current age {_format_minutes(float(data_age) if _is_number(data_age) else None)}"
+        if freshness in {"STALE", "OUTDATED"}
+        else _format_minutes(freshness_peak_gap)
+    )
+    freshness_summary = {
+        "title": "Telemetry Freshness",
+        "active_now": "ACTIVE" if freshness in {"STALE", "OUTDATED"} else "CLEAR",
+        "events": str(freshness_event_count),
+        "max_severity": _classify_severity(freshness_warning_seen, freshness_critical_seen),
+        "duration": freshness_duration_text,
+    }
+
+    return [pressure_summary, tank_summary, turbidity_summary, freshness_summary]
+
+
+def _render_alert_card(container: Any, summary: dict[str, str]) -> None:
+    with container:
+        with st.container(border=True):
+            st.markdown(f"**{summary['title']}**")
+            st.markdown(f"Active alert now: **{summary['active_now']}**")
+            st.markdown(f"Events in selected range: **{summary['events']}**")
+            st.markdown(f"Maximum severity observed: **{summary['max_severity']}**")
+            st.markdown(f"Duration: **{summary['duration']}**")
+
+
+def _build_operational_recommendation(
+    twin: dict[str, Any],
+    alert_summaries: list[dict[str, str]],
+) -> dict[str, str]:
+    status = str(twin.get("system_status", "NO_DATA"))
+    freshness = str(twin.get("freshness_status", "NO_DATA"))
+    confidence = float(twin.get("confidence", 0.0)) if _is_number(twin.get("confidence")) else 0.0
+    data_age = float(twin.get("data_age_minutes")) if _is_number(twin.get("data_age_minutes")) else None
+
+    critical_cards = [card["title"] for card in alert_summaries if card["max_severity"] == "CRITICAL"]
+    active_cards = [card["title"] for card in alert_summaries if card["active_now"] == "ACTIVE"]
+
+    if freshness == "OUTDATED":
+        return {
+            "recommendation": "Validate telemetry connectivity and operate with field confirmation until live data recovers.",
+            "reason": f"Data freshness is OUTDATED with last update {_format_minutes(data_age)} ago.",
+            "confidence": f"{confidence * 100:.1f}%",
+        }
+    if status == "CRITICAL":
+        reason = ", ".join(critical_cards[:2]) if critical_cards else "critical operational thresholds exceeded"
+        return {
+            "recommendation": "Escalate to incident response and prioritize stabilization actions at the selected APR.",
+            "reason": f"Critical conditions detected: {reason}.",
+            "confidence": f"{confidence * 100:.1f}%",
+        }
+    if status == "WARNING":
+        reason = ", ".join(active_cards[:2]) if active_cards else "warning conditions in recent telemetry"
+        return {
+            "recommendation": "Increase monitoring frequency and prepare corrective action if conditions persist.",
+            "reason": f"Warning signals are active in: {reason}.",
+            "confidence": f"{confidence * 100:.1f}%",
+        }
+    return {
+        "recommendation": "Continue normal operation with routine surveillance and threshold tracking.",
+        "reason": "No active high-impact deviations were detected in the selected window.",
+        "confidence": f"{confidence * 100:.1f}%",
+    }
+
+
+def _latest_kpi_row(gold_df: pd.DataFrame) -> pd.Series | None:
+    if gold_df.empty:
+        return None
+    return gold_df.sort_values("date").iloc[-1]
+
+
+def _as_percent(value: float | None) -> str:
+    if value is None:
+        return "N/A"
+    return f"{value * 100:.1f}%"
+
+
+def _safe_float_from_row(row: pd.Series | None, col: str) -> float | None:
+    if row is None or col not in row.index:
+        return None
+    value = pd.to_numeric(pd.Series([row[col]]), errors="coerce").iloc[0]
+    if pd.isna(value):
+        return None
+    return float(value)
+
+
+def _build_executive_summary(
+    silver_df: pd.DataFrame,
+    gold_df: pd.DataFrame,
+    twin: dict[str, Any],
+) -> list[dict[str, str]]:
+    latest_kpi = _latest_kpi_row(gold_df)
+
+    pressure_ratio = twin.get("pressure_compliance_ratio")
+    pressure_ratio = float(pressure_ratio) if _is_number(pressure_ratio) else _safe_float_from_row(latest_kpi, "pressure_ok_ratio")
+    if pressure_ratio is None and not silver_df.empty:
+        pressure_ratio = float(((silver_df["pressure_bar"] >= PRESSURE_MIN_BAR) & (silver_df["pressure_bar"] <= PRESSURE_MAX_BAR)).mean())
+    if pressure_ratio is None:
+        pressure_state = "No data"
+    elif pressure_ratio >= 0.95:
+        pressure_state = "On target"
+    elif pressure_ratio >= 0.90:
+        pressure_state = "Watch"
+    else:
+        pressure_state = "At risk"
+
+    if not silver_df.empty:
+        min_tank_value = pd.to_numeric(silver_df["tank_level_pct"], errors="coerce").min()
+        max_turbidity_value = pd.to_numeric(silver_df["turbidity_ntu"], errors="coerce").max()
+        min_tank = float(min_tank_value) if pd.notna(min_tank_value) else None
+        max_turbidity = float(max_turbidity_value) if pd.notna(max_turbidity_value) else None
+    else:
+        min_tank = None
+        max_turbidity = None
+
+    if min_tank is None:
+        tank_risk = "No data"
+    elif min_tank <= TANK_CRITICAL_PCT:
+        tank_risk = "High"
+    elif min_tank <= TANK_LOW_PCT:
+        tank_risk = "Medium"
+    else:
+        tank_risk = "Low"
+
+    if max_turbidity is None:
+        water_risk = "No data"
+    elif max_turbidity >= TURBIDITY_CRITICAL_NTU:
+        water_risk = "High"
+    elif max_turbidity > TURBIDITY_ALERT_NTU:
+        water_risk = "Medium"
+    else:
+        water_risk = "Low"
+
+    completeness = _safe_float_from_row(latest_kpi, "completeness_pct")
+    imputed = _safe_float_from_row(latest_kpi, "imputed_pct")
+    if completeness is None:
+        data_completeness = "No KPI in window"
+        completeness_value = "N/A"
+    else:
+        completeness_value = f"{completeness:.1f}%"
+        if completeness >= 95.0 and (imputed is None or imputed <= 5.0):
+            data_completeness = "Reliable"
+        elif completeness >= 90.0:
+            data_completeness = "Watch"
+        else:
+            data_completeness = "At risk"
+
+    imputed_text = f" | Imputed {imputed:.1f}%" if imputed is not None else ""
+    return [
+        {
+            "label": "Pressure Compliance",
+            "value": _as_percent(pressure_ratio),
+            "detail": pressure_state,
+        },
+        {
+            "label": "Tank Risk",
+            "value": tank_risk,
+            "detail": f"Min level {min_tank:.1f}%" if min_tank is not None else "No telemetry in window",
+        },
+        {
+            "label": "Water Quality Risk",
+            "value": water_risk,
+            "detail": f"Peak turbidity {max_turbidity:.2f} NTU" if max_turbidity is not None else "No telemetry in window",
+        },
+        {
+            "label": "Data Completeness",
+            "value": completeness_value,
+            "detail": f"{data_completeness}{imputed_text}",
+        },
+    ]
+
+
+def _build_incident_table(silver_df: pd.DataFrame) -> pd.DataFrame:
+    if silver_df.empty:
+        return pd.DataFrame()
+
+    incidents: list[dict[str, Any]] = []
+    for row in silver_df.to_dict(orient="records"):
+        ts = pd.to_datetime(row.get("timestamp"), errors="coerce")
+        if pd.isna(ts):
+            continue
+
+        pressure = float(row.get("pressure_bar")) if _is_number(row.get("pressure_bar")) else None
+        tank = float(row.get("tank_level_pct")) if _is_number(row.get("tank_level_pct")) else None
+        turbidity = float(row.get("turbidity_ntu")) if _is_number(row.get("turbidity_ntu")) else None
+
+        if pressure is not None and pressure < PRESSURE_MIN_BAR:
+            incidents.append(
+                {
+                    "timestamp": ts,
+                    "event": "Low pressure",
+                    "severity": "CRITICAL" if pressure < 1.0 else "WARNING",
+                    "observed_value": f"{pressure:.2f} bar",
+                    "threshold": f"< {PRESSURE_MIN_BAR:.2f} bar",
+                }
+            )
+        if tank is not None and tank < TANK_LOW_PCT:
+            incidents.append(
+                {
+                    "timestamp": ts,
+                    "event": "Low tank level",
+                    "severity": "CRITICAL" if tank <= TANK_CRITICAL_PCT else "WARNING",
+                    "observed_value": f"{tank:.1f}%",
+                    "threshold": f"< {TANK_LOW_PCT:.1f}%",
+                }
+            )
+        if turbidity is not None and turbidity > TURBIDITY_ALERT_NTU:
+            incidents.append(
+                {
+                    "timestamp": ts,
+                    "event": "High turbidity",
+                    "severity": "CRITICAL" if turbidity >= TURBIDITY_CRITICAL_NTU else "WARNING",
+                    "observed_value": f"{turbidity:.2f} NTU",
+                    "threshold": f"> {TURBIDITY_ALERT_NTU:.2f} NTU",
+                }
+            )
+
+    if not incidents:
+        return pd.DataFrame()
+
+    incidents_df = pd.DataFrame(incidents).sort_values("timestamp", ascending=False)
+    incidents_df["timestamp"] = incidents_df["timestamp"].dt.strftime("%Y-%m-%d %H:%M:%S")
+    return incidents_df.head(200)
+
+
 @st.cache_data(ttl=20)
 def load_local_base_data() -> tuple[pd.DataFrame, pd.DataFrame]:
     cfg = ensure_data_dirs()
@@ -161,8 +508,8 @@ def load_api_data(
     return silver_df, gold_df, twin_state
 
 
-data_source = st.sidebar.radio("Data source", options=["Local Parquet", "API"], index=0)
-api_url = st.sidebar.text_input("API URL", value="http://127.0.0.1:8000").strip().rstrip("/")
+data_source = st.sidebar.radio("Data access mode", options=["Local Parquet", "API"], index=0)
+api_url = st.sidebar.text_input("API endpoint", value="http://127.0.0.1:8000").strip().rstrip("/")
 
 if data_source == "Local Parquet":
     silver_base, gold_base = load_local_base_data()
@@ -180,7 +527,7 @@ if not apr_options:
     st.warning("No APR data found. Run `python scripts/run_mvp.py` first.")
     st.stop()
 
-selected_apr = st.sidebar.selectbox("APR selector", options=apr_options, index=0)
+selected_apr = st.sidebar.selectbox("APR in operation", options=apr_options, index=0)
 
 if data_source == "Local Parquet":
     apr_silver = silver_base[silver_base["apr_id"] == selected_apr] if not silver_base.empty else pd.DataFrame()
@@ -207,7 +554,7 @@ min_date = min(valid_dates).date()
 max_date = max(valid_dates).date()
 
 range_value = st.sidebar.date_input(
-    "Date range selector",
+    "Operational time window",
     value=(min_date, max_date),
     min_value=min_date,
     max_value=max_date,
@@ -234,87 +581,78 @@ if silver.empty and gold.empty:
     st.warning("No data found for the selected APR and date range.")
     st.stop()
 
-st.subheader("Current Status")
-status_col, freshness_col, pressure_col, tank_col, turbidity_col = st.columns(5)
-status_col.metric("System status", str(twin.get("system_status", "NO_DATA")))
-
+status = str(twin.get("system_status", "NO_DATA"))
 freshness = str(twin.get("freshness_status", "NO_DATA"))
 data_age = twin.get("data_age_minutes")
+last_telemetry = _format_timestamp(twin.get("timestamp"))
+
+st.subheader("Operational Snapshot")
+header_col_1, header_col_2, header_col_3, header_col_4 = st.columns(4)
+header_col_1.metric("Operational status", status)
+
+freshness_caption = f"{data_age:.1f} minutes old" if _is_number(data_age) else "Age unavailable"
 badge_color = {
     "FRESH": "#15803d",
     "STALE": "#b45309",
     "OUTDATED": "#b91c1c",
     "NO_DATA": "#475569",
 }.get(freshness, "#475569")
-freshness_caption = f"{data_age:.1f} min old" if isinstance(data_age, (int, float)) else "Age unavailable"
-freshness_col.markdown(
+header_col_2.markdown(
     (
         "<div style='padding:0.25rem 0.5rem;border-radius:0.5rem;"
         f"background:{badge_color};color:white;font-weight:600;display:inline-block'>{freshness}</div>"
     ),
     unsafe_allow_html=True,
 )
-freshness_col.caption(f"Freshness badge: {freshness_caption}")
+header_col_2.caption(f"Data freshness: {freshness_caption}")
+header_col_3.metric("Last telemetry timestamp", last_telemetry)
+header_col_4.metric("Selected APR", selected_apr)
 
 pressure_value = twin.get("current_pressure_bar")
 tank_value = twin.get("current_tank_level_pct")
 turbidity_value = twin.get("current_turbidity_ntu")
-pressure_col.metric("Pressure (bar)", f"{pressure_value:.2f}" if pressure_value is not None else "N/A")
-tank_col.metric("Tank level (%)", f"{tank_value:.1f}" if tank_value is not None else "N/A")
-turbidity_col.metric("Turbidity (NTU)", f"{turbidity_value:.2f}" if turbidity_value is not None else "N/A")
 
-st.subheader("Top Alert Cards")
+alert_summaries = _build_alert_summaries(
+    silver_df=silver,
+    gold_df=gold,
+    pressure_value=float(pressure_value) if _is_number(pressure_value) else None,
+    tank_value=float(tank_value) if _is_number(tank_value) else None,
+    turbidity_value=float(turbidity_value) if _is_number(turbidity_value) else None,
+    freshness=freshness,
+    data_age=float(data_age) if _is_number(data_age) else None,
+)
+
+recommendation = _build_operational_recommendation(twin=twin, alert_summaries=alert_summaries)
+st.subheader("Operational Recommendation")
+with st.container(border=True):
+    st.markdown(f"**Recommendation:** {recommendation['recommendation']}")
+    st.markdown(f"**Reason:** {recommendation['reason']}")
+    st.markdown(f"**Confidence:** {recommendation['confidence']}")
+
+st.subheader("Alert Situation Overview")
+alert_cols = st.columns(4)
+for col, summary in zip(alert_cols, alert_summaries):
+    _render_alert_card(col, summary)
+
 alerts = twin.get("active_alerts", [])
-low_pressure_events = int((silver["pressure_bar"] < PRESSURE_MIN_BAR).sum()) if not silver.empty else 0
-high_turbidity_events = int((silver["turbidity_ntu"] > TURBIDITY_ALERT_NTU).sum()) if not silver.empty else 0
-low_tank_events = int((silver["tank_level_pct"] < TANK_LOW_PCT).sum()) if not silver.empty else 0
-
-low_pressure_active = isinstance(pressure_value, (int, float)) and pressure_value < PRESSURE_MIN_BAR
-high_turbidity_active = isinstance(turbidity_value, (int, float)) and turbidity_value > TURBIDITY_ALERT_NTU
-low_tank_active = isinstance(tank_value, (int, float)) and tank_value < TANK_LOW_PCT
-stale_data_active = freshness in {"STALE", "OUTDATED"}
-
-stale_detail = freshness_caption
-if isinstance(data_age, (int, float)):
-    stale_detail = f"{freshness} ({data_age:.1f} min)"
-
-alert_col_1, alert_col_2, alert_col_3, alert_col_4 = st.columns(4)
-alert_col_1.metric(
-    "Low pressure",
-    "ALERT" if low_pressure_active else "OK",
-    f"{low_pressure_events} events in range",
-    delta_color="inverse",
-)
-alert_col_2.metric(
-    "High turbidity",
-    "ALERT" if high_turbidity_active else "OK",
-    f"{high_turbidity_events} events in range",
-    delta_color="inverse",
-)
-alert_col_3.metric(
-    "Tank low",
-    "ALERT" if low_tank_active else "OK",
-    f"{low_tank_events} events in range",
-    delta_color="inverse",
-)
-alert_col_4.metric(
-    "Stale data",
-    "ALERT" if stale_data_active else "OK",
-    stale_detail,
-    delta_color="inverse",
-)
 if alerts:
-    st.warning(" | ".join(alerts[:4]))
+    st.warning("Current alert feed: " + " | ".join(alerts[:4]))
 else:
-    st.success("No active alerts for selected APR.")
+    st.success("Current alert feed: no active alerts.")
 
-st.subheader("Daily KPIs")
-if gold.empty:
-    st.info("No daily KPI data found for selected filters.")
-else:
-    kpi_view = gold.sort_values("date", ascending=False).head(31).copy()
-    kpi_view["date"] = kpi_view["date"].dt.date
-    st.dataframe(kpi_view, use_container_width=True)
+st.subheader("Executive Summary")
+summary_metrics = _build_executive_summary(silver_df=silver, gold_df=gold, twin=twin)
+summary_cols = st.columns(4)
+for col, metric in zip(summary_cols, summary_metrics):
+    col.metric(metric["label"], metric["value"], metric["detail"], delta_color="inverse")
+
+with st.expander("Daily KPI detail (technical)", expanded=False):
+    if gold.empty:
+        st.info("No daily KPI data found for selected filters.")
+    else:
+        kpi_view = gold.sort_values("date", ascending=False).head(31).copy()
+        kpi_view["date"] = kpi_view["date"].dt.date
+        st.dataframe(kpi_view, use_container_width=True)
 
 st.subheader("Pressure Trend")
 if silver.empty:
@@ -343,16 +681,31 @@ else:
     turbidity_df["turbidity_critical_threshold"] = TURBIDITY_CRITICAL_NTU
     st.line_chart(turbidity_df)
 
-st.subheader("Turbidity Alerts")
-if silver.empty:
-    alerts_df = pd.DataFrame()
-elif "turbidity_alert" in silver.columns:
-    alerts_df = silver[silver["turbidity_alert"] == True].copy()  # noqa: E712
+st.subheader("Incidents and Events")
+incidents_df = _build_incident_table(silver)
+if incidents_df.empty:
+    st.success("No incidents detected in the selected time window.")
 else:
-    alerts_df = silver[silver["turbidity_ntu"] > TURBIDITY_ALERT_NTU].copy()
+    st.dataframe(incidents_df, use_container_width=True)
 
-if alerts_df.empty:
-    st.success("No turbidity alerts in selected data.")
-else:
-    cols = ["timestamp", "apr_id", "turbidity_ntu", "pressure_bar", "tank_level_pct"]
-    st.dataframe(alerts_df[cols].sort_values("timestamp", ascending=False).head(50), use_container_width=True)
+with st.expander("Raw telemetry (secondary view)", expanded=False):
+    if silver.empty:
+        st.info("No telemetry available for the selected filters.")
+    else:
+        raw_cols = [
+            "timestamp",
+            "apr_id",
+            "sensor_id",
+            "flow_lps",
+            "pressure_bar",
+            "tank_level_pct",
+            "turbidity_ntu",
+            "pump_on",
+            "pressure_ok",
+            "turbidity_alert",
+            "is_imputed",
+            "batch_id",
+        ]
+        available_cols = [col for col in raw_cols if col in silver.columns]
+        raw_view = silver[available_cols].sort_values("timestamp", ascending=False).head(200).copy()
+        st.dataframe(raw_view, use_container_width=True)
