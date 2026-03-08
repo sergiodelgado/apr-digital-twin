@@ -78,6 +78,10 @@ class TwinState(BaseModel):
     confidence: Literal["LOW", "MEDIUM", "HIGH"] = "LOW"
     confidence_score: float = 0.0
     projected_tank_level_2h_pct: float | None = None
+    observed_tank_trend_pct_per_hour: float | None = None
+    tank_balance_consistency: Literal["CONSISTENT", "WATCH", "INCONSISTENT", "UNKNOWN"] = "UNKNOWN"
+    hydraulic_risk: Literal["LOW", "MEDIUM", "HIGH", "UNKNOWN"] = "UNKNOWN"
+    possible_root_cause: str | None = None
     reason_codes: list[str] = Field(default_factory=list)
     operational_recommendation: str | None = None
     turbidity_alert_active: bool = False

@@ -7,8 +7,14 @@ from typing import Literal
 import pandas as pd
 
 from apr_twin.config import (
+    ABNORMAL_TANK_DROP_CRITICAL_PCT_PER_HOUR,
+    ABNORMAL_TANK_DROP_WARN_PCT_PER_HOUR,
     FRESHNESS_FRESH_MAX_MINUTES,
     FRESHNESS_STALE_MAX_MINUTES,
+    HYDRAULIC_TREND_WINDOW_HOURS,
+    INSUFFICIENT_RECOVERY_MAX_TREND_PCT_PER_HOUR,
+    NORMAL_STORAGE_MIN_PCT,
+    PUMP_RECOVERY_MIN_TREND_PCT_PER_HOUR,
     PRESSURE_MIN_BAR,
     TANK_CRITICAL_PCT,
     TANK_LOW_PCT,
@@ -35,11 +41,54 @@ def _confidence_label(confidence_score: float) -> Literal["LOW", "MEDIUM", "HIGH
     return "LOW"
 
 
-def _project_tank_level_2h(apr_df: pd.DataFrame, latest_ts: pd.Timestamp, current_tank: float) -> float | None:
-    recent = apr_df[apr_df["timestamp"] >= (latest_ts - pd.Timedelta(hours=2))][["timestamp", "tank_level_pct"]].copy()
+def _coerce_bool(value: object) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "t", "yes", "y", "on"}
+    try:
+        if pd.isna(value):
+            return False
+    except TypeError:
+        pass
+    return bool(value)
+
+
+def _select_recent_hydraulic_window(apr_df: pd.DataFrame, latest_ts: pd.Timestamp) -> pd.DataFrame:
+    recent = apr_df[
+        apr_df["timestamp"] >= (latest_ts - pd.Timedelta(hours=HYDRAULIC_TREND_WINDOW_HOURS))
+    ][["timestamp", "tank_level_pct", "pump_on"]].copy()
     recent = recent.dropna(subset=["timestamp", "tank_level_pct"]).sort_values("timestamp")
     if len(recent) < 2:
-        recent = apr_df[["timestamp", "tank_level_pct"]].dropna(subset=["timestamp", "tank_level_pct"]).sort_values("timestamp").tail(24)
+        recent = (
+            apr_df[["timestamp", "tank_level_pct", "pump_on"]]
+            .dropna(subset=["timestamp", "tank_level_pct"])
+            .sort_values("timestamp")
+            .tail(24)
+        )
+    return recent
+
+
+def _compute_observed_tank_trend_pct_per_hour(recent_window: pd.DataFrame) -> float | None:
+    if len(recent_window) < 2:
+        return None
+
+    first = recent_window.iloc[0]
+    last = recent_window.iloc[-1]
+    first_ts = pd.Timestamp(first["timestamp"])
+    last_ts = pd.Timestamp(last["timestamp"])
+    hours = float((last_ts - first_ts).total_seconds() / 3600.0)
+    if hours <= 0:
+        return None
+
+    first_tank = float(first["tank_level_pct"])
+    last_tank = float(last["tank_level_pct"])
+    trend = (last_tank - first_tank) / hours
+    return round(trend, 3)
+
+
+def _project_tank_level_2h(apr_df: pd.DataFrame, latest_ts: pd.Timestamp, current_tank: float) -> float | None:
+    recent = _select_recent_hydraulic_window(apr_df=apr_df, latest_ts=latest_ts)[["timestamp", "tank_level_pct"]].copy()
     if len(recent) < 2:
         return None
 
@@ -57,6 +106,79 @@ def _project_tank_level_2h(apr_df: pd.DataFrame, latest_ts: pd.Timestamp, curren
     projected = current_tank + (slope_per_min * 120.0)
     projected = max(0.0, min(100.0, projected))
     return round(projected, 2)
+
+
+def _evaluate_hydraulic_consistency(
+    *,
+    observed_tank_trend_pct_per_hour: float | None,
+    current_pump_on: bool,
+    recent_pump_on_ratio: float | None,
+    current_pressure: float,
+    current_tank: float,
+    projected_tank_low: bool,
+) -> dict[str, object]:
+    pump_on_no_recovery = False
+    abnormal_drop_warn = False
+    abnormal_drop_critical = False
+    low_pressure_with_normal_storage = False
+    projected_depletion_insufficient_recovery = False
+
+    if observed_tank_trend_pct_per_hour is not None:
+        if current_pump_on and observed_tank_trend_pct_per_hour < PUMP_RECOVERY_MIN_TREND_PCT_PER_HOUR:
+            pump_on_no_recovery = True
+        if observed_tank_trend_pct_per_hour <= -ABNORMAL_TANK_DROP_CRITICAL_PCT_PER_HOUR:
+            abnormal_drop_critical = True
+        elif observed_tank_trend_pct_per_hour <= -ABNORMAL_TANK_DROP_WARN_PCT_PER_HOUR:
+            abnormal_drop_warn = True
+
+        enough_recent_pumping = (recent_pump_on_ratio or 0.0) >= 0.5
+        if (
+            projected_tank_low
+            and (current_pump_on or enough_recent_pumping)
+            and observed_tank_trend_pct_per_hour < INSUFFICIENT_RECOVERY_MAX_TREND_PCT_PER_HOUR
+        ):
+            projected_depletion_insufficient_recovery = True
+
+    low_pressure_with_normal_storage = current_pressure < PRESSURE_MIN_BAR and current_tank >= NORMAL_STORAGE_MIN_PCT
+
+    if observed_tank_trend_pct_per_hour is None:
+        tank_balance_consistency: Literal["CONSISTENT", "WATCH", "INCONSISTENT", "UNKNOWN"] = "UNKNOWN"
+        hydraulic_risk: Literal["LOW", "MEDIUM", "HIGH", "UNKNOWN"] = "UNKNOWN"
+    elif any((pump_on_no_recovery, abnormal_drop_critical, low_pressure_with_normal_storage, projected_depletion_insufficient_recovery)):
+        tank_balance_consistency = "INCONSISTENT"
+        hydraulic_risk = "HIGH" if abnormal_drop_critical or projected_depletion_insufficient_recovery else "MEDIUM"
+    elif abnormal_drop_warn:
+        tank_balance_consistency = "WATCH"
+        hydraulic_risk = "MEDIUM"
+    else:
+        tank_balance_consistency = "CONSISTENT"
+        hydraulic_risk = "LOW"
+
+    if projected_depletion_insufficient_recovery:
+        possible_root_cause = "Net outflow is exceeding recovery capacity."
+    elif pump_on_no_recovery:
+        possible_root_cause = "Pump is running but storage is not recovering as expected."
+    elif low_pressure_with_normal_storage:
+        possible_root_cause = "Distribution-side hydraulic losses are likely despite normal storage."
+    elif abnormal_drop_critical or abnormal_drop_warn:
+        possible_root_cause = "Tank level is dropping faster than typical demand behavior."
+    elif observed_tank_trend_pct_per_hour is None:
+        possible_root_cause = "Not enough recent telemetry to infer hydraulic behavior."
+    elif observed_tank_trend_pct_per_hour >= 0:
+        possible_root_cause = "Recent tank trend is consistent with recovery."
+    else:
+        possible_root_cause = "Recent tank decline appears demand-driven under current operation."
+
+    return {
+        "pump_on_no_recovery": pump_on_no_recovery,
+        "abnormal_drop_warn": abnormal_drop_warn,
+        "abnormal_drop_critical": abnormal_drop_critical,
+        "low_pressure_with_normal_storage": low_pressure_with_normal_storage,
+        "projected_depletion_insufficient_recovery": projected_depletion_insufficient_recovery,
+        "tank_balance_consistency": tank_balance_consistency,
+        "hydraulic_risk": hydraulic_risk,
+        "possible_root_cause": possible_root_cause,
+    }
 
 
 def _classify_data_completeness(completeness_pct: float | None, imputed_pct: float | None) -> Literal["GOOD", "WATCH", "AT_RISK", "UNKNOWN"]:
@@ -80,9 +202,32 @@ def _build_operational_recommendation(
     turbidity_high: bool,
     turbidity_critical: bool,
     data_completeness_state: str,
+    pump_on_no_recovery: bool,
+    abnormal_drop_warn: bool,
+    abnormal_drop_critical: bool,
+    low_pressure_with_normal_storage: bool,
+    projected_depletion_insufficient_recovery: bool,
+    hydraulic_risk: str,
+    possible_root_cause: str | None,
 ) -> str:
     if freshness_status == "OUTDATED":
         return "Validate telemetry connectivity and operate with field confirmation until live data recovers."
+    if projected_depletion_insufficient_recovery:
+        return (
+            "Projected depletion with weak recovery trend: verify pump output, check leakage/losses, "
+            "and initiate near-term refill control."
+        )
+    if pump_on_no_recovery:
+        return (
+            "Pump is active but tank is not recovering: inspect pump discharge, valve positions, "
+            "and potential network leakage."
+        )
+    if low_pressure_with_normal_storage:
+        return "Low pressure with normal storage points to distribution hydraulics; inspect valves, PRVs, and line losses."
+    if abnormal_drop_critical:
+        return "Critical tank drop rate detected: investigate abnormal demand/leaks and stabilize storage immediately."
+    if abnormal_drop_warn:
+        return "Tank is dropping faster than expected: increase surveillance and verify abnormal consumption patterns."
     if pressure_critical:
         return "Escalate immediately for critical low pressure and stabilize distribution."
     if pressure_low:
@@ -103,6 +248,8 @@ def _build_operational_recommendation(
         return "Confirm daily KPI completeness before using this state for planning decisions."
     if freshness_status == "STALE":
         return "Keep operations stable and prioritize telemetry refresh in the next cycle."
+    if hydraulic_risk in {"MEDIUM", "HIGH"} and possible_root_cause:
+        return f"Hydraulic inconsistency detected. Likely cause: {possible_root_cause}"
     return "Continue normal operation with routine monitoring of pressure, tank level, and turbidity."
 
 
@@ -117,6 +264,8 @@ def _compute_confidence_score(
     turbidity_high: bool,
     turbidity_critical: bool,
     data_completeness_state: str,
+    tank_balance_consistency: str,
+    hydraulic_risk: str,
 ) -> float:
     # Fixed additive penalties keep confidence transparent and auditable.
     score = 0.95
@@ -151,6 +300,16 @@ def _compute_confidence_score(
     elif data_completeness_state == "UNKNOWN":
         score -= 0.05
 
+    if tank_balance_consistency == "WATCH":
+        score -= 0.05
+    elif tank_balance_consistency == "INCONSISTENT":
+        score -= 0.10
+
+    if hydraulic_risk == "MEDIUM":
+        score -= 0.06
+    elif hydraulic_risk == "HIGH":
+        score -= 0.10
+
     return round(max(0.0, min(1.0, score)), 3)
 
 
@@ -168,6 +327,9 @@ def _empty_state(
         freshness_status="NO_DATA",
         confidence="LOW",
         confidence_score=0.0,
+        tank_balance_consistency="UNKNOWN",
+        hydraulic_risk="UNKNOWN",
+        possible_root_cause="No telemetry available to infer hydraulic behavior.",
         reason_codes=reason_codes,
         operational_recommendation=recommendation,
         active_alerts=["No Silver telemetry data available."],
@@ -234,6 +396,14 @@ def compute_current_state(apr_id: str | None = None) -> TwinState:
     current_pressure = float(latest["pressure_bar"])
     current_tank = float(latest["tank_level_pct"])
     current_turbidity = float(latest["turbidity_ntu"])
+    current_pump_on = _coerce_bool(latest.get("pump_on"))
+    recent_hydraulic_window = _select_recent_hydraulic_window(apr_df=apr_df, latest_ts=latest_ts)
+    observed_tank_trend_pct_per_hour = _compute_observed_tank_trend_pct_per_hour(recent_hydraulic_window)
+    recent_pump_on_ratio: float | None = None
+    if not recent_hydraulic_window.empty:
+        pump_series = recent_hydraulic_window["pump_on"].map(_coerce_bool).astype(float)
+        if not pump_series.empty:
+            recent_pump_on_ratio = round(float(pump_series.mean()), 3)
     projected_tank_level_2h_pct = _project_tank_level_2h(apr_df=apr_df, latest_ts=latest_ts, current_tank=current_tank)
 
     pressure_low = current_pressure < PRESSURE_MIN_BAR
@@ -249,6 +419,22 @@ def compute_current_state(apr_id: str | None = None) -> TwinState:
     turbidity_high = current_turbidity > TURBIDITY_ALERT_NTU
     turbidity_critical = current_turbidity >= TURBIDITY_CRITICAL_NTU
     data_completeness_state = _classify_data_completeness(completeness_pct=completeness_pct, imputed_pct=imputed_pct)
+    hydraulic_eval = _evaluate_hydraulic_consistency(
+        observed_tank_trend_pct_per_hour=observed_tank_trend_pct_per_hour,
+        current_pump_on=current_pump_on,
+        recent_pump_on_ratio=recent_pump_on_ratio,
+        current_pressure=current_pressure,
+        current_tank=current_tank,
+        projected_tank_low=projected_tank_low,
+    )
+    pump_on_no_recovery = bool(hydraulic_eval["pump_on_no_recovery"])
+    abnormal_drop_warn = bool(hydraulic_eval["abnormal_drop_warn"])
+    abnormal_drop_critical = bool(hydraulic_eval["abnormal_drop_critical"])
+    low_pressure_with_normal_storage = bool(hydraulic_eval["low_pressure_with_normal_storage"])
+    projected_depletion_insufficient_recovery = bool(hydraulic_eval["projected_depletion_insufficient_recovery"])
+    tank_balance_consistency = str(hydraulic_eval["tank_balance_consistency"])
+    hydraulic_risk = str(hydraulic_eval["hydraulic_risk"])
+    possible_root_cause = str(hydraulic_eval["possible_root_cause"])
 
     alerts: list[str] = []
     reason_codes: list[str] = []
@@ -270,6 +456,28 @@ def compute_current_state(apr_id: str | None = None) -> TwinState:
         alerts.append("Projected critical tank level in 2 hours")
         _append_reason(reason_codes, "PROJECTED_TANK_CRITICAL_2H")
 
+    if pump_on_no_recovery:
+        alerts.append("Pump on but tank level not recovering")
+        _append_reason(reason_codes, "HYDRAULIC_PUMP_ON_NO_RECOVERY")
+    if abnormal_drop_warn:
+        alerts.append("Abnormal tank drop rate")
+        _append_reason(reason_codes, "HYDRAULIC_ABNORMAL_TANK_DROP_RATE")
+    if abnormal_drop_critical:
+        _append_reason(reason_codes, "HYDRAULIC_ABNORMAL_TANK_DROP_RATE_CRITICAL")
+    if low_pressure_with_normal_storage:
+        alerts.append("Low pressure with normal storage")
+        _append_reason(reason_codes, "HYDRAULIC_LOW_PRESSURE_WITH_NORMAL_STORAGE")
+    if projected_depletion_insufficient_recovery:
+        alerts.append("Projected depletion risk with insufficient recovery")
+        _append_reason(reason_codes, "HYDRAULIC_PROJECTED_DEPLETION_INSUFFICIENT_RECOVERY")
+
+    if tank_balance_consistency == "WATCH":
+        _append_reason(reason_codes, "HYDRAULIC_BALANCE_WATCH")
+    elif tank_balance_consistency == "INCONSISTENT":
+        _append_reason(reason_codes, "HYDRAULIC_BALANCE_INCONSISTENT")
+    if hydraulic_risk in {"MEDIUM", "HIGH"}:
+        _append_reason(reason_codes, f"HYDRAULIC_RISK_{hydraulic_risk}")
+
     if turbidity_high:
         alerts.append("High turbidity")
         _append_reason(reason_codes, "TURBIDITY_HIGH")
@@ -289,7 +497,7 @@ def compute_current_state(apr_id: str | None = None) -> TwinState:
     elif data_completeness_state == "UNKNOWN":
         _append_reason(reason_codes, "DATA_COMPLETENESS_UNKNOWN")
 
-    if turbidity_critical or tank_critical or projected_tank_critical or pressure_critical:
+    if turbidity_critical or tank_critical or projected_tank_critical or pressure_critical or hydraulic_risk == "HIGH":
         status = "CRITICAL"
     elif alerts:
         status = "WARNING"
@@ -318,6 +526,8 @@ def compute_current_state(apr_id: str | None = None) -> TwinState:
         turbidity_high=turbidity_high,
         turbidity_critical=turbidity_critical,
         data_completeness_state=data_completeness_state,
+        tank_balance_consistency=tank_balance_consistency,
+        hydraulic_risk=hydraulic_risk,
     )
     confidence = _confidence_label(confidence_score)
     operational_recommendation = _build_operational_recommendation(
@@ -331,6 +541,13 @@ def compute_current_state(apr_id: str | None = None) -> TwinState:
         turbidity_high=turbidity_high,
         turbidity_critical=turbidity_critical,
         data_completeness_state=data_completeness_state,
+        pump_on_no_recovery=pump_on_no_recovery,
+        abnormal_drop_warn=abnormal_drop_warn,
+        abnormal_drop_critical=abnormal_drop_critical,
+        low_pressure_with_normal_storage=low_pressure_with_normal_storage,
+        projected_depletion_insufficient_recovery=projected_depletion_insufficient_recovery,
+        hydraulic_risk=hydraulic_risk,
+        possible_root_cause=possible_root_cause,
     )
 
     return TwinState(
@@ -347,6 +564,10 @@ def compute_current_state(apr_id: str | None = None) -> TwinState:
         confidence=confidence,
         confidence_score=confidence_score,
         projected_tank_level_2h_pct=projected_tank_level_2h_pct,
+        observed_tank_trend_pct_per_hour=observed_tank_trend_pct_per_hour,
+        tank_balance_consistency=tank_balance_consistency,
+        hydraulic_risk=hydraulic_risk,
+        possible_root_cause=possible_root_cause,
         reason_codes=reason_codes,
         operational_recommendation=operational_recommendation,
         turbidity_alert_active=current_turbidity > TURBIDITY_ALERT_NTU,

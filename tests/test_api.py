@@ -113,6 +113,10 @@ def test_api_endpoints(monkeypatch, tmp_path: Path) -> None:
     assert "reason_codes" in twin_payload
     assert isinstance(twin_payload["reason_codes"], list)
     assert "projected_tank_level_2h_pct" in twin_payload
+    assert "observed_tank_trend_pct_per_hour" in twin_payload
+    assert twin_payload["tank_balance_consistency"] in {"CONSISTENT", "WATCH", "INCONSISTENT", "UNKNOWN"}
+    assert twin_payload["hydraulic_risk"] in {"LOW", "MEDIUM", "HIGH", "UNKNOWN"}
+    assert "possible_root_cause" in twin_payload
     assert "operational_recommendation" in twin_payload
     assert "data_age_minutes" in twin_payload
 

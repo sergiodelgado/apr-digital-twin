@@ -72,7 +72,10 @@ def test_end_to_end_pipeline_with_quality_outputs(monkeypatch, tmp_path: Path) -
     assert state.freshness_status in {"FRESH", "STALE", "OUTDATED", "NO_DATA"}
     assert state.confidence in {"LOW", "MEDIUM", "HIGH"}
     assert 0.0 <= state.confidence_score <= 1.0
+    assert state.tank_balance_consistency in {"CONSISTENT", "WATCH", "INCONSISTENT", "UNKNOWN"}
+    assert state.hydraulic_risk in {"LOW", "MEDIUM", "HIGH", "UNKNOWN"}
     assert isinstance(state.reason_codes, list)
+    assert state.possible_root_cause is not None
     assert state.operational_recommendation is not None
 
 
@@ -300,4 +303,42 @@ def test_batch_lineage_and_quality_metrics_stability(monkeypatch, tmp_path: Path
     assert set(gold_df["batch_id"].unique().tolist()) == {first_report["batch_id"]}
     assert set(gold_df["source_file"].unique().tolist()) == {"batch_a.parquet|batch_b.parquet"}
     assert gold_df["processed_at"].notna().all()
+
+
+def test_hydraulic_consistency_detects_pump_recovery_mismatch(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("APR_DATA_DIR", str(tmp_path / "data"))
+    cfg = ensure_data_dirs()
+
+    now = datetime.now()
+    rows = []
+    for idx in range(6):
+        rows.append(
+            {
+                "timestamp": now - timedelta(minutes=(25 - (idx * 5))),
+                "apr_id": "APR-HYD",
+                "sensor_id": "s1",
+                "flow_lps": 3.0 + (idx * 0.1),
+                "pressure_bar": 1.7 - (idx * 0.08),
+                "tank_level_pct": 65.0 - (idx * 2.0),
+                "turbidity_ntu": 0.4,
+                "pump_on": True,
+                "pressure_ok": False,
+                "turbidity_alert": False,
+                "is_synthetic": True,
+                "is_imputed": False,
+            }
+        )
+    silver_df = pd.DataFrame(rows)
+    write_parquet(silver_df, cfg.silver_file)
+
+    state = compute_current_state(apr_id="APR-HYD")
+
+    assert state.system_status == "CRITICAL"
+    assert state.hydraulic_risk == "HIGH"
+    assert state.tank_balance_consistency == "INCONSISTENT"
+    assert state.observed_tank_trend_pct_per_hour is not None and state.observed_tank_trend_pct_per_hour < 0.0
+    assert "HYDRAULIC_PUMP_ON_NO_RECOVERY" in state.reason_codes
+    assert "HYDRAULIC_LOW_PRESSURE_WITH_NORMAL_STORAGE" in state.reason_codes
+    assert "HYDRAULIC_PROJECTED_DEPLETION_INSUFFICIENT_RECOVERY" in state.reason_codes
+    assert "Projected depletion" in str(state.operational_recommendation)
 
