@@ -7,9 +7,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import numpy as np
-import pandas as pd
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "src"
 
@@ -17,8 +14,7 @@ try:
     from apr_twin.config import ensure_data_dirs
     from apr_twin.pipelines.bronze_to_silver import process_bronze_to_silver
     from apr_twin.pipelines.silver_to_gold import process_silver_to_gold
-    from apr_twin.storage.parquet_io import read_parquet_file, write_parquet
-    from apr_twin.synthetic.generator import generate_bronze_telemetry
+    from apr_twin.synthetic.generator import DEMO_SCENARIOS, generate_bronze_telemetry
     from apr_twin.twin.engine import compute_current_state
     from apr_twin.utils.logging_utils import configure_logging
 except ModuleNotFoundError:
@@ -27,20 +23,11 @@ except ModuleNotFoundError:
     from apr_twin.config import ensure_data_dirs
     from apr_twin.pipelines.bronze_to_silver import process_bronze_to_silver
     from apr_twin.pipelines.silver_to_gold import process_silver_to_gold
-    from apr_twin.storage.parquet_io import read_parquet_file, write_parquet
-    from apr_twin.synthetic.generator import generate_bronze_telemetry
+    from apr_twin.synthetic.generator import DEMO_SCENARIOS, generate_bronze_telemetry
     from apr_twin.twin.engine import compute_current_state
     from apr_twin.utils.logging_utils import configure_logging
 
 LOGGER = logging.getLogger(__name__)
-
-SCENARIOS = (
-    "normal",
-    "stale_data",
-    "low_pressure",
-    "high_turbidity",
-    "projected_low_tank_level",
-)
 
 
 def _clear_previous_outputs() -> None:
@@ -59,66 +46,22 @@ def _clear_previous_outputs() -> None:
     LOGGER.info("Cleared previous demo outputs (removed %d bronze parquet files).", deleted)
 
 
-def _nominalize_tail(df: pd.DataFrame, freq_minutes: int) -> pd.DataFrame:
-    out = df.copy()
-    points = min(len(out), max(24, int(180 / max(freq_minutes, 1))))
-    if points == 0:
-        return out
-    tail_idx = out.index[-points:]
-
-    out.loc[tail_idx, "pressure_bar"] = np.linspace(2.05, 2.25, points)
-    out.loc[tail_idx, "tank_level_pct"] = np.linspace(64.0, 58.0, points)
-    out.loc[tail_idx, "turbidity_ntu"] = np.linspace(0.34, 0.26, points)
-    out.loc[tail_idx, "flow_lps"] = np.linspace(2.3, 2.7, points)
-    out.loc[tail_idx, "pump_on"] = 0
-    return out
-
-
-def _apply_scenario(df: pd.DataFrame, scenario: str, freq_minutes: int, stale_minutes: int) -> pd.DataFrame:
-    out = _nominalize_tail(df=df, freq_minutes=freq_minutes)
-    out["timestamp"] = pd.to_datetime(out["timestamp"], errors="coerce")
-
-    if scenario == "normal":
-        return out
-
-    if scenario == "stale_data":
-        out["timestamp"] = out["timestamp"] - pd.Timedelta(minutes=max(stale_minutes, 61))
-        return out
-
-    points = min(len(out), max(12, int(90 / max(freq_minutes, 1))))
-    if points == 0:
-        return out
-    tail_idx = out.index[-points:]
-
-    if scenario == "low_pressure":
-        out.loc[tail_idx, "pressure_bar"] = np.linspace(1.35, 1.12, points)
-        out.loc[tail_idx, "tank_level_pct"] = np.linspace(57.0, 54.0, points)
-        out.loc[tail_idx, "turbidity_ntu"] = np.linspace(0.38, 0.32, points)
-        out.loc[tail_idx, "pump_on"] = 1
-        return out
-
-    if scenario == "high_turbidity":
-        out.loc[tail_idx, "pressure_bar"] = np.linspace(2.10, 2.22, points)
-        out.loc[tail_idx, "tank_level_pct"] = np.linspace(58.0, 55.0, points)
-        out.loc[tail_idx, "turbidity_ntu"] = np.linspace(2.4, 3.6, points)
-        out.loc[tail_idx, "pump_on"] = 1
-        return out
-
-    if scenario == "projected_low_tank_level":
-        projected_points = min(len(out), max(36, int(180 / max(freq_minutes, 1))))
-        projected_idx = out.index[-projected_points:]
-        out.loc[projected_idx, "tank_level_pct"] = np.linspace(40.0, 34.0, projected_points)
-        out.loc[projected_idx, "pressure_bar"] = np.linspace(2.0, 2.1, projected_points)
-        out.loc[projected_idx, "turbidity_ntu"] = np.linspace(0.34, 0.30, projected_points)
-        out.loc[projected_idx, "flow_lps"] = np.linspace(3.4, 4.0, projected_points)
-        out.loc[projected_idx, "pump_on"] = 0
-        return out
-
-    raise ValueError(f"Unsupported scenario: {scenario}")
-
-
-def _generate(days: int, freq_minutes: int, apr_id: str, seed: int) -> Path:
-    bronze_path = generate_bronze_telemetry(days=days, freq_minutes=freq_minutes, apr_id=apr_id, seed=seed)
+def _generate(
+    days: int,
+    freq_minutes: int,
+    apr_id: str,
+    seed: int,
+    scenario: str | None = None,
+    stale_minutes: int = 180,
+) -> Path:
+    bronze_path = generate_bronze_telemetry(
+        days=days,
+        freq_minutes=freq_minutes,
+        apr_id=apr_id,
+        seed=seed,
+        scenario=scenario,
+        stale_minutes=stale_minutes,
+    )
     LOGGER.info("Generated telemetry file: %s", bronze_path)
     return Path(bronze_path)
 
@@ -143,18 +86,14 @@ def _prepare_demo(
     if clear_previous:
         _clear_previous_outputs()
 
-    bronze_path = _generate(days=days, freq_minutes=freq_minutes, apr_id=apr_id, seed=seed)
-    bronze_df = read_parquet_file(bronze_path)
-    if bronze_df.empty:
-        raise RuntimeError("Generated bronze dataset is empty.")
-
-    scenario_df = _apply_scenario(
-        df=bronze_df,
-        scenario=scenario,
+    bronze_path = _generate(
+        days=days,
         freq_minutes=freq_minutes,
+        apr_id=apr_id,
+        seed=seed,
+        scenario=scenario,
         stale_minutes=stale_minutes,
     )
-    write_parquet(df=scenario_df, path=bronze_path)
     silver_path, gold_path = _run_pipeline()
 
     twin_state = compute_current_state(apr_id=apr_id)
@@ -165,6 +104,8 @@ def _prepare_demo(
     print(f"Gold file:    {gold_path}")
     print(f"Twin status:  {twin_state.system_status}")
     print(f"Freshness:    {twin_state.freshness_status}")
+    print(f"Hydraulic risk: {twin_state.hydraulic_risk}")
+    print(f"Possible root cause: {twin_state.possible_root_cause}")
     print(f"Reason codes: {', '.join(twin_state.reason_codes) if twin_state.reason_codes else 'none'}")
     print(f"Recommendation: {twin_state.operational_recommendation}")
     print("\nStart API:")
@@ -210,9 +151,18 @@ def _build_parser() -> argparse.ArgumentParser:
     gen_cmd.add_argument("--freq-minutes", type=int, default=5)
     gen_cmd.add_argument("--apr-id", type=str, default="APR-001")
     gen_cmd.add_argument("--seed", type=int, default=42)
+    gen_cmd.add_argument("--scenario", type=str, choices=DEMO_SCENARIOS, default=None)
+    gen_cmd.add_argument("--stale-minutes", type=int, default=180)
     gen_cmd.set_defaults(
         handler=lambda args: print(
-            _generate(days=args.days, freq_minutes=args.freq_minutes, apr_id=args.apr_id, seed=args.seed)
+            _generate(
+                days=args.days,
+                freq_minutes=args.freq_minutes,
+                apr_id=args.apr_id,
+                seed=args.seed,
+                scenario=args.scenario,
+                stale_minutes=args.stale_minutes,
+            )
         )
     )
 
@@ -220,7 +170,7 @@ def _build_parser() -> argparse.ArgumentParser:
     pipe_cmd.set_defaults(handler=lambda args: _run_pipeline())
 
     prep_cmd = sub.add_parser("prepare", help="Generate telemetry, apply a demo scenario, and run pipeline.")
-    prep_cmd.add_argument("--scenario", type=str, choices=SCENARIOS, default="normal")
+    prep_cmd.add_argument("--scenario", type=str, choices=DEMO_SCENARIOS, default="normal")
     prep_cmd.add_argument("--days", type=int, default=7)
     prep_cmd.add_argument("--freq-minutes", type=int, default=5)
     prep_cmd.add_argument("--apr-id", type=str, default="APR-001")

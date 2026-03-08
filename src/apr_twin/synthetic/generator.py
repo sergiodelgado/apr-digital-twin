@@ -13,6 +13,19 @@ from apr_twin.storage.parquet_io import write_parquet
 
 LOGGER = logging.getLogger(__name__)
 
+DEMO_SCENARIOS: tuple[str, ...] = (
+    "normal",
+    "stale_data",
+    "low_pressure",
+    "high_turbidity",
+    "projected_low_tank_level",
+    "pump_on_no_recovery",
+    "abnormal_tank_drop",
+    "low_pressure_with_normal_storage",
+    "demand_spike_with_storage_depletion",
+    "noisy_or_erratic_tank_sensor",
+)
+
 
 def _demand_profile_lps(timestamps: pd.DatetimeIndex, rng: np.random.Generator) -> np.ndarray:
     hour = timestamps.hour + (timestamps.minute / 60.0)
@@ -24,11 +37,135 @@ def _demand_profile_lps(timestamps: pd.DatetimeIndex, rng: np.random.Generator) 
     return np.clip((base * weekend_factor) + noise, 0.2, None)
 
 
+def _tail_points(total_rows: int, freq_minutes: int, window_minutes: int, min_points: int) -> int:
+    if total_rows <= 0:
+        return 0
+    points = max(min_points, int(window_minutes / max(freq_minutes, 1)))
+    return min(total_rows, points)
+
+
+def _nominalize_tail(df: pd.DataFrame, freq_minutes: int) -> pd.DataFrame:
+    out = df.copy()
+    points = _tail_points(total_rows=len(out), freq_minutes=freq_minutes, window_minutes=180, min_points=24)
+    if points <= 0:
+        return out
+    tail_idx = out.index[-points:]
+
+    out.loc[tail_idx, "pressure_bar"] = np.linspace(2.05, 2.25, points)
+    out.loc[tail_idx, "tank_level_pct"] = np.linspace(64.0, 58.0, points)
+    out.loc[tail_idx, "turbidity_ntu"] = np.linspace(0.34, 0.26, points)
+    out.loc[tail_idx, "flow_lps"] = np.linspace(2.3, 2.7, points)
+    out.loc[tail_idx, "pump_on"] = 0
+    return out
+
+
+def apply_synthetic_scenario(
+    df: pd.DataFrame,
+    *,
+    scenario: str,
+    freq_minutes: int,
+    stale_minutes: int = 180,
+) -> pd.DataFrame:
+    if scenario not in DEMO_SCENARIOS:
+        raise ValueError(f"Unsupported scenario: {scenario}")
+
+    out = _nominalize_tail(df=df, freq_minutes=freq_minutes)
+    out["timestamp"] = pd.to_datetime(out["timestamp"], errors="coerce")
+
+    if scenario == "normal":
+        return out
+
+    if scenario == "stale_data":
+        out["timestamp"] = out["timestamp"] - pd.Timedelta(minutes=max(stale_minutes, 61))
+        return out
+
+    # Keep enough shaped points so the 2h hydraulic window is fully scenario-controlled.
+    points = _tail_points(total_rows=len(out), freq_minutes=freq_minutes, window_minutes=150, min_points=26)
+    if points <= 0:
+        return out
+    tail_idx = out.index[-points:]
+
+    if scenario == "low_pressure":
+        out.loc[tail_idx, "pressure_bar"] = np.linspace(1.35, 1.12, points)
+        out.loc[tail_idx, "tank_level_pct"] = np.linspace(57.0, 54.0, points)
+        out.loc[tail_idx, "turbidity_ntu"] = np.linspace(0.38, 0.32, points)
+        out.loc[tail_idx, "pump_on"] = 1
+        return out
+
+    if scenario == "high_turbidity":
+        out.loc[tail_idx, "pressure_bar"] = np.linspace(2.10, 2.22, points)
+        out.loc[tail_idx, "tank_level_pct"] = np.linspace(58.0, 55.0, points)
+        out.loc[tail_idx, "turbidity_ntu"] = np.linspace(2.4, 3.6, points)
+        out.loc[tail_idx, "pump_on"] = 1
+        return out
+
+    if scenario == "projected_low_tank_level":
+        projected_points = _tail_points(total_rows=len(out), freq_minutes=freq_minutes, window_minutes=180, min_points=36)
+        projected_idx = out.index[-projected_points:]
+        out.loc[projected_idx, "tank_level_pct"] = np.linspace(40.0, 34.0, projected_points)
+        out.loc[projected_idx, "pressure_bar"] = np.linspace(2.0, 2.1, projected_points)
+        out.loc[projected_idx, "turbidity_ntu"] = np.linspace(0.34, 0.30, projected_points)
+        out.loc[projected_idx, "flow_lps"] = np.linspace(3.4, 4.0, projected_points)
+        out.loc[projected_idx, "pump_on"] = 0
+        return out
+
+    if scenario == "pump_on_no_recovery":
+        out.loc[tail_idx, "tank_level_pct"] = np.linspace(62.0, 60.0, points)
+        out.loc[tail_idx, "pressure_bar"] = np.linspace(2.15, 2.25, points)
+        out.loc[tail_idx, "turbidity_ntu"] = np.linspace(0.30, 0.28, points)
+        out.loc[tail_idx, "flow_lps"] = np.linspace(3.2, 3.8, points)
+        out.loc[tail_idx, "pump_on"] = 1
+        return out
+
+    if scenario == "abnormal_tank_drop":
+        out.loc[tail_idx, "tank_level_pct"] = np.linspace(78.0, 66.0, points)
+        out.loc[tail_idx, "pressure_bar"] = np.linspace(2.25, 2.10, points)
+        out.loc[tail_idx, "turbidity_ntu"] = np.linspace(0.29, 0.31, points)
+        out.loc[tail_idx, "flow_lps"] = np.linspace(3.7, 5.2, points)
+        out.loc[tail_idx, "pump_on"] = 0
+        return out
+
+    if scenario == "low_pressure_with_normal_storage":
+        out.loc[tail_idx, "tank_level_pct"] = np.linspace(62.0, 61.0, points)
+        out.loc[tail_idx, "pressure_bar"] = np.linspace(1.30, 1.18, points)
+        out.loc[tail_idx, "turbidity_ntu"] = np.linspace(0.32, 0.30, points)
+        out.loc[tail_idx, "flow_lps"] = np.linspace(2.9, 3.2, points)
+        out.loc[tail_idx, "pump_on"] = 0
+        return out
+
+    if scenario == "demand_spike_with_storage_depletion":
+        out.loc[tail_idx, "tank_level_pct"] = np.linspace(33.5, 31.0, points)
+        out.loc[tail_idx, "pressure_bar"] = np.linspace(1.95, 1.80, points)
+        out.loc[tail_idx, "turbidity_ntu"] = np.linspace(0.33, 0.31, points)
+        out.loc[tail_idx, "flow_lps"] = np.linspace(4.8, 6.2, points)
+        pump_profile = np.ones(points, dtype=int)
+        off_from = int(points * 0.75)
+        pump_profile[off_from:] = 0
+        out.loc[tail_idx, "pump_on"] = pump_profile
+        return out
+
+    if scenario == "noisy_or_erratic_tank_sensor":
+        err_points = _tail_points(total_rows=len(out), freq_minutes=freq_minutes, window_minutes=125, min_points=25)
+        err_idx = out.index[-err_points:]
+        base = np.full(err_points, 55.0)
+        oscillation = 6.0 * np.sin(np.linspace(0.0, 8.0 * np.pi, err_points))
+        out.loc[err_idx, "tank_level_pct"] = np.clip(base + oscillation, 35.0, 85.0)
+        out.loc[err_idx, "pressure_bar"] = np.linspace(2.15, 2.08, err_points)
+        out.loc[err_idx, "turbidity_ntu"] = np.linspace(0.30, 0.34, err_points)
+        out.loc[err_idx, "flow_lps"] = np.linspace(2.6, 2.9, err_points)
+        out.loc[err_idx, "pump_on"] = 0
+        return out
+
+    raise ValueError(f"Unsupported scenario: {scenario}")
+
+
 def generate_bronze_telemetry(
     days: int = 7,
     freq_minutes: int = 5,
     apr_id: str = "APR-001",
     seed: int = 42,
+    scenario: str | None = None,
+    stale_minutes: int = 180,
 ) -> Path:
     cfg = ensure_data_dirs()
     rng = np.random.default_rng(seed)
@@ -108,6 +245,13 @@ def generate_bronze_telemetry(
         )
 
     df = pd.DataFrame(rows)
+    if scenario is not None:
+        df = apply_synthetic_scenario(
+            df=df,
+            scenario=scenario,
+            freq_minutes=freq_minutes,
+            stale_minutes=stale_minutes,
+        )
     output_path = cfg.bronze_dir / f"telemetry_raw_{datetime.now():%Y%m%d_%H%M%S}.parquet"
     write_parquet(df=df, path=output_path)
     LOGGER.info("Generated bronze telemetry at %s", output_path)
@@ -120,6 +264,8 @@ def main() -> None:
     parser.add_argument("--freq-minutes", type=int, default=5)
     parser.add_argument("--apr-id", type=str, default="APR-001")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--scenario", type=str, choices=DEMO_SCENARIOS, default=None)
+    parser.add_argument("--stale-minutes", type=int, default=180)
     args = parser.parse_args()
 
     path = generate_bronze_telemetry(
@@ -127,6 +273,8 @@ def main() -> None:
         freq_minutes=args.freq_minutes,
         apr_id=args.apr_id,
         seed=args.seed,
+        scenario=args.scenario,
+        stale_minutes=args.stale_minutes,
     )
     print(path)
 

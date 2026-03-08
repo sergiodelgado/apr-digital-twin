@@ -87,6 +87,28 @@ def _compute_observed_tank_trend_pct_per_hour(recent_window: pd.DataFrame) -> fl
     return round(trend, 3)
 
 
+def _is_erratic_tank_sensor_signal(recent_window: pd.DataFrame) -> bool:
+    if len(recent_window) < 8:
+        return False
+
+    tank_series = pd.to_numeric(recent_window["tank_level_pct"], errors="coerce").dropna()
+    if len(tank_series) < 8:
+        return False
+
+    deltas = tank_series.diff().dropna()
+    if len(deltas) < 6:
+        return False
+
+    signs = deltas.apply(lambda value: 1 if value > 0 else (-1 if value < 0 else 0))
+    sign_changes = int(((signs * signs.shift(1)) < 0).sum())
+    abs_step_median = float(deltas.abs().median())
+    net_change = float(tank_series.iloc[-1] - tank_series.iloc[0])
+    span = float(tank_series.max() - tank_series.min())
+
+    # Detect oscillatory behavior with large step-to-step swings and low net change.
+    return sign_changes >= 5 and abs_step_median >= 1.5 and span >= 8.0 and abs(net_change) <= 4.0
+
+
 def _project_tank_level_2h(apr_df: pd.DataFrame, latest_ts: pd.Timestamp, current_tank: float) -> float | None:
     recent = _select_recent_hydraulic_window(apr_df=apr_df, latest_ts=latest_ts)[["timestamp", "tank_level_pct"]].copy()
     if len(recent) < 2:
@@ -111,6 +133,7 @@ def _project_tank_level_2h(apr_df: pd.DataFrame, latest_ts: pd.Timestamp, curren
 def _evaluate_hydraulic_consistency(
     *,
     observed_tank_trend_pct_per_hour: float | None,
+    tank_sensor_erratic: bool,
     current_pump_on: bool,
     recent_pump_on_ratio: float | None,
     current_pressure: float,
@@ -144,7 +167,15 @@ def _evaluate_hydraulic_consistency(
     if observed_tank_trend_pct_per_hour is None:
         tank_balance_consistency: Literal["CONSISTENT", "WATCH", "INCONSISTENT", "UNKNOWN"] = "UNKNOWN"
         hydraulic_risk: Literal["LOW", "MEDIUM", "HIGH", "UNKNOWN"] = "UNKNOWN"
-    elif any((pump_on_no_recovery, abnormal_drop_critical, low_pressure_with_normal_storage, projected_depletion_insufficient_recovery)):
+    elif any(
+        (
+            pump_on_no_recovery,
+            abnormal_drop_critical,
+            low_pressure_with_normal_storage,
+            projected_depletion_insufficient_recovery,
+            tank_sensor_erratic,
+        )
+    ):
         tank_balance_consistency = "INCONSISTENT"
         hydraulic_risk = "HIGH" if abnormal_drop_critical or projected_depletion_insufficient_recovery else "MEDIUM"
     elif abnormal_drop_warn:
@@ -160,6 +191,8 @@ def _evaluate_hydraulic_consistency(
         possible_root_cause = "Pump is running but storage is not recovering as expected."
     elif low_pressure_with_normal_storage:
         possible_root_cause = "Distribution-side hydraulic losses are likely despite normal storage."
+    elif tank_sensor_erratic:
+        possible_root_cause = "Tank level sensor appears noisy or erratic."
     elif abnormal_drop_critical or abnormal_drop_warn:
         possible_root_cause = "Tank level is dropping faster than typical demand behavior."
     elif observed_tank_trend_pct_per_hour is None:
@@ -175,6 +208,7 @@ def _evaluate_hydraulic_consistency(
         "abnormal_drop_critical": abnormal_drop_critical,
         "low_pressure_with_normal_storage": low_pressure_with_normal_storage,
         "projected_depletion_insufficient_recovery": projected_depletion_insufficient_recovery,
+        "tank_sensor_erratic": tank_sensor_erratic,
         "tank_balance_consistency": tank_balance_consistency,
         "hydraulic_risk": hydraulic_risk,
         "possible_root_cause": possible_root_cause,
@@ -207,6 +241,7 @@ def _build_operational_recommendation(
     abnormal_drop_critical: bool,
     low_pressure_with_normal_storage: bool,
     projected_depletion_insufficient_recovery: bool,
+    tank_sensor_erratic: bool,
     hydraulic_risk: str,
     possible_root_cause: str | None,
 ) -> str:
@@ -224,6 +259,8 @@ def _build_operational_recommendation(
         )
     if low_pressure_with_normal_storage:
         return "Low pressure with normal storage points to distribution hydraulics; inspect valves, PRVs, and line losses."
+    if tank_sensor_erratic:
+        return "Erratic tank signal detected: validate level sensor health before acting on storage trend alarms."
     if abnormal_drop_critical:
         return "Critical tank drop rate detected: investigate abnormal demand/leaks and stabilize storage immediately."
     if abnormal_drop_warn:
@@ -399,6 +436,7 @@ def compute_current_state(apr_id: str | None = None) -> TwinState:
     current_pump_on = _coerce_bool(latest.get("pump_on"))
     recent_hydraulic_window = _select_recent_hydraulic_window(apr_df=apr_df, latest_ts=latest_ts)
     observed_tank_trend_pct_per_hour = _compute_observed_tank_trend_pct_per_hour(recent_hydraulic_window)
+    tank_sensor_erratic = _is_erratic_tank_sensor_signal(recent_hydraulic_window)
     recent_pump_on_ratio: float | None = None
     if not recent_hydraulic_window.empty:
         pump_series = recent_hydraulic_window["pump_on"].map(_coerce_bool).astype(float)
@@ -421,6 +459,7 @@ def compute_current_state(apr_id: str | None = None) -> TwinState:
     data_completeness_state = _classify_data_completeness(completeness_pct=completeness_pct, imputed_pct=imputed_pct)
     hydraulic_eval = _evaluate_hydraulic_consistency(
         observed_tank_trend_pct_per_hour=observed_tank_trend_pct_per_hour,
+        tank_sensor_erratic=tank_sensor_erratic,
         current_pump_on=current_pump_on,
         recent_pump_on_ratio=recent_pump_on_ratio,
         current_pressure=current_pressure,
@@ -432,6 +471,7 @@ def compute_current_state(apr_id: str | None = None) -> TwinState:
     abnormal_drop_critical = bool(hydraulic_eval["abnormal_drop_critical"])
     low_pressure_with_normal_storage = bool(hydraulic_eval["low_pressure_with_normal_storage"])
     projected_depletion_insufficient_recovery = bool(hydraulic_eval["projected_depletion_insufficient_recovery"])
+    tank_sensor_erratic = bool(hydraulic_eval["tank_sensor_erratic"])
     tank_balance_consistency = str(hydraulic_eval["tank_balance_consistency"])
     hydraulic_risk = str(hydraulic_eval["hydraulic_risk"])
     possible_root_cause = str(hydraulic_eval["possible_root_cause"])
@@ -470,6 +510,9 @@ def compute_current_state(apr_id: str | None = None) -> TwinState:
     if projected_depletion_insufficient_recovery:
         alerts.append("Projected depletion risk with insufficient recovery")
         _append_reason(reason_codes, "HYDRAULIC_PROJECTED_DEPLETION_INSUFFICIENT_RECOVERY")
+    if tank_sensor_erratic:
+        alerts.append("Noisy or erratic tank level signal")
+        _append_reason(reason_codes, "HYDRAULIC_TANK_SENSOR_ERRATIC")
 
     if tank_balance_consistency == "WATCH":
         _append_reason(reason_codes, "HYDRAULIC_BALANCE_WATCH")
@@ -546,6 +589,7 @@ def compute_current_state(apr_id: str | None = None) -> TwinState:
         abnormal_drop_critical=abnormal_drop_critical,
         low_pressure_with_normal_storage=low_pressure_with_normal_storage,
         projected_depletion_insufficient_recovery=projected_depletion_insufficient_recovery,
+        tank_sensor_erratic=tank_sensor_erratic,
         hydraulic_risk=hydraulic_risk,
         possible_root_cause=possible_root_cause,
     )

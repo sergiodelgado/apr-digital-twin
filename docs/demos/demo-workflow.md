@@ -26,6 +26,14 @@ python scripts/demo_workflow.py prepare --scenario normal --apr-id APR-001 --day
 
 This performs a clean local reset, telemetry generation, scenario shaping, and Bronze to Silver to Gold processing.
 
+Hydraulic-focused scenarios available for `--scenario` include:
+
+- `pump_on_no_recovery`
+- `abnormal_tank_drop`
+- `low_pressure_with_normal_storage`
+- `demand_spike_with_storage_depletion`
+- `noisy_or_erratic_tank_sensor`
+
 ## 2) Start API (Terminal B)
 
 ```powershell
