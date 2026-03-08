@@ -29,6 +29,11 @@ LOGGER = logging.getLogger(__name__)
 st.set_page_config(page_title="APR Digital Twin", layout="wide")
 st.title("APR Operational Control Room")
 
+FILTER_SOURCE_OPTIONS = ["Local Parquet", "API"]
+DEFAULT_API_URL = "http://127.0.0.1:8000"
+MAX_INCIDENT_ROWS = 120
+MAX_RAW_TELEMETRY_ROWS = 120
+
 
 def _normalize_silver(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
@@ -102,6 +107,88 @@ def _apply_local_filters(
     return s, g
 
 
+def _coerce_date(value: Any) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    parsed = pd.to_datetime(value, errors="coerce")
+    if pd.isna(parsed):
+        return None
+    return parsed.date()
+
+
+def _resolve_bounds_for_apr(date_bounds: dict[str, tuple[date, date]], apr_id: str) -> tuple[date, date] | None:
+    if apr_id in date_bounds:
+        return date_bounds[apr_id]
+    if not date_bounds:
+        return None
+    min_date = min(bounds[0] for bounds in date_bounds.values())
+    max_date = max(bounds[1] for bounds in date_bounds.values())
+    return min_date, max_date
+
+
+def _clamp_date_range(
+    requested_start: Any,
+    requested_end: Any,
+    min_date: date,
+    max_date: date,
+) -> tuple[date, date]:
+    start_date = _coerce_date(requested_start) or min_date
+    end_date = _coerce_date(requested_end) or max_date
+    start_date = max(min_date, min(max_date, start_date))
+    end_date = max(min_date, min(max_date, end_date))
+    if start_date > end_date:
+        return end_date, start_date
+    return start_date, end_date
+
+
+def _build_local_date_bounds(
+    silver_df: pd.DataFrame,
+    gold_df: pd.DataFrame,
+    apr_options: list[str],
+) -> dict[str, tuple[date, date]]:
+    bounds: dict[str, tuple[date, date]] = {}
+    for apr_id in apr_options:
+        candidates: list[pd.Timestamp] = []
+        if not silver_df.empty:
+            apr_silver = silver_df[silver_df["apr_id"] == apr_id]
+            if not apr_silver.empty:
+                candidates.extend([apr_silver["timestamp"].min(), apr_silver["timestamp"].max()])
+        if not gold_df.empty:
+            apr_gold = gold_df[gold_df["apr_id"] == apr_id]
+            if not apr_gold.empty:
+                candidates.extend([apr_gold["date"].min(), apr_gold["date"].max()])
+        valid_dates = [d for d in candidates if pd.notna(d)]
+        if valid_dates:
+            bounds[apr_id] = (min(valid_dates).date(), max(valid_dates).date())
+    return bounds
+
+
+def _build_api_date_bounds(apr_catalog: list[dict[str, Any]]) -> dict[str, tuple[date, date]]:
+    bounds: dict[str, tuple[date, date]] = {}
+    for row in apr_catalog:
+        apr_id = str(row.get("apr_id", "")).strip()
+        if not apr_id:
+            continue
+        first_ts = pd.to_datetime(row.get("first_telemetry_timestamp"), errors="coerce")
+        last_ts = pd.to_datetime(row.get("last_telemetry_timestamp"), errors="coerce")
+        first_kpi = pd.to_datetime(row.get("first_kpi_date"), errors="coerce")
+        last_kpi = pd.to_datetime(row.get("last_kpi_date"), errors="coerce")
+        candidates = [first_ts, last_ts, first_kpi, last_kpi]
+        valid_dates = [d for d in candidates if pd.notna(d)]
+        if valid_dates:
+            bounds[apr_id] = (min(valid_dates).date(), max(valid_dates).date())
+    return bounds
+
+
+def _normalize_api_url(value: str) -> str:
+    url = str(value or DEFAULT_API_URL).strip()
+    if not url:
+        return DEFAULT_API_URL
+    return url.rstrip("/")
+
+
 def _format_timestamp(value: Any) -> str:
     ts = pd.to_datetime(value, errors="coerce")
     if pd.isna(ts):
@@ -151,6 +238,56 @@ def _sum_gold_duration(gold_df: pd.DataFrame, col_name: str) -> float | None:
     if series.empty:
         return None
     return float(series.sum())
+
+
+def _choose_resample_rule(start_date: date, end_date: date) -> str | None:
+    window_hours = max((datetime.combine(end_date, time.max) - datetime.combine(start_date, time.min)).total_seconds() / 3600.0, 0.0)
+    if window_hours <= 6:
+        return None
+    if window_hours <= 24:
+        return "2min"
+    if window_hours <= 72:
+        return "5min"
+    if window_hours <= 7 * 24:
+        return "15min"
+    if window_hours <= 30 * 24:
+        return "1h"
+    return "3h"
+
+
+@st.cache_data(ttl=20)
+def _prepare_telemetry_for_dashboard(silver_df: pd.DataFrame) -> pd.DataFrame:
+    if silver_df.empty:
+        return silver_df
+    telemetry = silver_df.copy()
+    telemetry["timestamp"] = pd.to_datetime(telemetry["timestamp"], errors="coerce")
+    telemetry = telemetry.dropna(subset=["timestamp"]).sort_values("timestamp")
+    for col in ("pressure_bar", "tank_level_pct", "turbidity_ntu"):
+        if col in telemetry.columns:
+            telemetry[col] = pd.to_numeric(telemetry[col], errors="coerce")
+    return telemetry
+
+
+@st.cache_data(ttl=20)
+def _build_chart_telemetry(
+    telemetry_df: pd.DataFrame,
+    start_date: date,
+    end_date: date,
+) -> tuple[pd.DataFrame, str]:
+    if telemetry_df.empty:
+        return pd.DataFrame(), "raw"
+
+    cols = [col for col in ("pressure_bar", "tank_level_pct", "turbidity_ntu") if col in telemetry_df.columns]
+    if not cols:
+        return pd.DataFrame(), "raw"
+
+    indexed = telemetry_df.set_index("timestamp")[cols].sort_index()
+    rule = _choose_resample_rule(start_date, end_date)
+    if rule is None:
+        return indexed, "raw"
+
+    resampled = indexed.resample(rule).mean().dropna(how="all")
+    return resampled, rule
 
 
 def _build_alert_summaries(
@@ -394,57 +531,55 @@ def _build_executive_summary(
     ]
 
 
-def _build_incident_table(silver_df: pd.DataFrame) -> pd.DataFrame:
+@st.cache_data(ttl=20)
+def _build_incident_table(silver_df: pd.DataFrame, max_rows: int = MAX_INCIDENT_ROWS) -> pd.DataFrame:
     if silver_df.empty:
         return pd.DataFrame()
+    required_cols = {"timestamp", "pressure_bar", "tank_level_pct", "turbidity_ntu"}
+    if not required_cols.issubset(set(silver_df.columns)):
+        return pd.DataFrame()
 
-    incidents: list[dict[str, Any]] = []
-    for row in silver_df.to_dict(orient="records"):
-        ts = pd.to_datetime(row.get("timestamp"), errors="coerce")
-        if pd.isna(ts):
-            continue
+    incidents: list[pd.DataFrame] = []
+    frame = silver_df[["timestamp", "pressure_bar", "tank_level_pct", "turbidity_ntu"]].copy()
 
-        pressure = float(row.get("pressure_bar")) if _is_number(row.get("pressure_bar")) else None
-        tank = float(row.get("tank_level_pct")) if _is_number(row.get("tank_level_pct")) else None
-        turbidity = float(row.get("turbidity_ntu")) if _is_number(row.get("turbidity_ntu")) else None
+    pressure_mask = frame["pressure_bar"] < PRESSURE_MIN_BAR
+    if pressure_mask.any():
+        pressure_rows = frame.loc[pressure_mask, ["timestamp", "pressure_bar"]].copy()
+        pressure_rows["event"] = "Low pressure"
+        pressure_rows["severity"] = "WARNING"
+        pressure_rows.loc[pressure_rows["pressure_bar"] < 1.0, "severity"] = "CRITICAL"
+        pressure_rows["observed_value"] = pressure_rows["pressure_bar"].map("{:.2f} bar".format)
+        pressure_rows["threshold"] = f"< {PRESSURE_MIN_BAR:.2f} bar"
+        incidents.append(pressure_rows.drop(columns=["pressure_bar"]))
 
-        if pressure is not None and pressure < PRESSURE_MIN_BAR:
-            incidents.append(
-                {
-                    "timestamp": ts,
-                    "event": "Low pressure",
-                    "severity": "CRITICAL" if pressure < 1.0 else "WARNING",
-                    "observed_value": f"{pressure:.2f} bar",
-                    "threshold": f"< {PRESSURE_MIN_BAR:.2f} bar",
-                }
-            )
-        if tank is not None and tank < TANK_LOW_PCT:
-            incidents.append(
-                {
-                    "timestamp": ts,
-                    "event": "Low tank level",
-                    "severity": "CRITICAL" if tank <= TANK_CRITICAL_PCT else "WARNING",
-                    "observed_value": f"{tank:.1f}%",
-                    "threshold": f"< {TANK_LOW_PCT:.1f}%",
-                }
-            )
-        if turbidity is not None and turbidity > TURBIDITY_ALERT_NTU:
-            incidents.append(
-                {
-                    "timestamp": ts,
-                    "event": "High turbidity",
-                    "severity": "CRITICAL" if turbidity >= TURBIDITY_CRITICAL_NTU else "WARNING",
-                    "observed_value": f"{turbidity:.2f} NTU",
-                    "threshold": f"> {TURBIDITY_ALERT_NTU:.2f} NTU",
-                }
-            )
+    tank_mask = frame["tank_level_pct"] < TANK_LOW_PCT
+    if tank_mask.any():
+        tank_rows = frame.loc[tank_mask, ["timestamp", "tank_level_pct"]].copy()
+        tank_rows["event"] = "Low tank level"
+        tank_rows["severity"] = "WARNING"
+        tank_rows.loc[tank_rows["tank_level_pct"] <= TANK_CRITICAL_PCT, "severity"] = "CRITICAL"
+        tank_rows["observed_value"] = tank_rows["tank_level_pct"].map("{:.1f}%".format)
+        tank_rows["threshold"] = f"< {TANK_LOW_PCT:.1f}%"
+        incidents.append(tank_rows.drop(columns=["tank_level_pct"]))
+
+    turbidity_mask = frame["turbidity_ntu"] > TURBIDITY_ALERT_NTU
+    if turbidity_mask.any():
+        turbidity_rows = frame.loc[turbidity_mask, ["timestamp", "turbidity_ntu"]].copy()
+        turbidity_rows["event"] = "High turbidity"
+        turbidity_rows["severity"] = "WARNING"
+        turbidity_rows.loc[turbidity_rows["turbidity_ntu"] >= TURBIDITY_CRITICAL_NTU, "severity"] = "CRITICAL"
+        turbidity_rows["observed_value"] = turbidity_rows["turbidity_ntu"].map("{:.2f} NTU".format)
+        turbidity_rows["threshold"] = f"> {TURBIDITY_ALERT_NTU:.2f} NTU"
+        incidents.append(turbidity_rows.drop(columns=["turbidity_ntu"]))
 
     if not incidents:
         return pd.DataFrame()
 
-    incidents_df = pd.DataFrame(incidents).sort_values("timestamp", ascending=False)
+    incidents_df = pd.concat(incidents, ignore_index=True)
+    incidents_df["severity_rank"] = incidents_df["severity"].map({"CRITICAL": 0, "WARNING": 1}).fillna(2)
+    incidents_df = incidents_df.sort_values(["severity_rank", "timestamp"], ascending=[True, False]).head(max_rows)
     incidents_df["timestamp"] = incidents_df["timestamp"].dt.strftime("%Y-%m-%d %H:%M:%S")
-    return incidents_df.head(200)
+    return incidents_df.drop(columns=["severity_rank"])
 
 
 @st.cache_data(ttl=20)
@@ -453,6 +588,14 @@ def load_local_base_data() -> tuple[pd.DataFrame, pd.DataFrame]:
     silver_df = read_parquet_file(cfg.silver_file)
     gold_df = read_parquet_file(cfg.gold_daily_file)
     return _normalize_silver(silver_df), _normalize_gold(gold_df)
+
+
+@st.cache_data(ttl=20)
+def load_local_filter_context() -> tuple[pd.DataFrame, pd.DataFrame, list[str], dict[str, tuple[date, date]]]:
+    silver_df, gold_df = load_local_base_data()
+    apr_options = _extract_apr_ids(silver_df, gold_df)
+    date_bounds = _build_local_date_bounds(silver_df, gold_df, apr_options)
+    return silver_df, gold_df, apr_options, date_bounds
 
 
 @st.cache_data(ttl=15)
@@ -471,6 +614,14 @@ def load_api_aprs(base_url: str) -> list[dict[str, Any]]:
     if last_exception is not None:
         raise last_exception
     return []
+
+
+@st.cache_data(ttl=15)
+def load_api_filter_context(base_url: str) -> tuple[list[dict[str, Any]], list[str], dict[str, tuple[date, date]]]:
+    apr_catalog = load_api_aprs(base_url)
+    apr_options = sorted({str(row.get("apr_id", "")).strip() for row in apr_catalog if row.get("apr_id")})
+    date_bounds = _build_api_date_bounds(apr_catalog)
+    return apr_catalog, apr_options, date_bounds
 
 
 @st.cache_data(ttl=15)
@@ -508,17 +659,35 @@ def load_api_data(
     return silver_df, gold_df, twin_state
 
 
-data_source = st.sidebar.radio("Data access mode", options=["Local Parquet", "API"], index=0)
-api_url = st.sidebar.text_input("API endpoint", value="http://127.0.0.1:8000").strip().rstrip("/")
+@st.cache_data(ttl=15)
+def load_local_twin_state(apr_id: str) -> dict[str, Any]:
+    return compute_current_state(apr_id=apr_id).model_dump()
 
-if data_source == "Local Parquet":
-    silver_base, gold_base = load_local_base_data()
-    apr_options = _extract_apr_ids(silver_base, gold_base)
-    apr_catalog: list[dict[str, Any]] = []
+
+default_filters: dict[str, Any] = {
+    "data_source": FILTER_SOURCE_OPTIONS[0],
+    "api_url": DEFAULT_API_URL,
+    "apr_id": None,
+    "start_date": None,
+    "end_date": None,
+}
+if "applied_filters" not in st.session_state:
+    st.session_state.applied_filters = default_filters.copy()
+
+saved_filters = dict(default_filters)
+saved_filters.update(dict(st.session_state.applied_filters))
+applied_data_source = str(saved_filters.get("data_source"))
+if applied_data_source not in FILTER_SOURCE_OPTIONS:
+    applied_data_source = FILTER_SOURCE_OPTIONS[0]
+applied_api_url = _normalize_api_url(str(saved_filters.get("api_url", DEFAULT_API_URL)))
+
+silver_base = pd.DataFrame()
+gold_base = pd.DataFrame()
+if applied_data_source == "Local Parquet":
+    silver_base, gold_base, apr_options, date_bounds = load_local_filter_context()
 else:
     try:
-        apr_catalog = load_api_aprs(api_url)
-        apr_options = sorted({str(row.get("apr_id", "")).strip() for row in apr_catalog if row.get("apr_id")})
+        _, apr_options, date_bounds = load_api_filter_context(applied_api_url)
     except Exception as exc:  # noqa: BLE001
         st.error(f"Failed to load available APRs from API: {exc}")
         st.stop()
@@ -527,39 +696,98 @@ if not apr_options:
     st.warning("No APR data found. Run `python scripts/run_mvp.py` first.")
     st.stop()
 
-selected_apr = st.sidebar.selectbox("APR in operation", options=apr_options, index=0)
+applied_apr = str(saved_filters.get("apr_id") or apr_options[0])
+if applied_apr not in apr_options:
+    applied_apr = apr_options[0]
 
-if data_source == "Local Parquet":
-    apr_silver = silver_base[silver_base["apr_id"] == selected_apr] if not silver_base.empty else pd.DataFrame()
-    apr_gold = gold_base[gold_base["apr_id"] == selected_apr] if not gold_base.empty else pd.DataFrame()
-    date_candidates: list[pd.Timestamp] = []
-    if not apr_silver.empty:
-        date_candidates.extend([apr_silver["timestamp"].min(), apr_silver["timestamp"].max()])
-    if not apr_gold.empty:
-        date_candidates.extend([apr_gold["date"].min(), apr_gold["date"].max()])
-else:
-    apr_meta = next((row for row in apr_catalog if str(row.get("apr_id")) == selected_apr), {})
-    first_ts = pd.to_datetime(apr_meta.get("first_telemetry_timestamp"), errors="coerce")
-    last_ts = pd.to_datetime(apr_meta.get("last_telemetry_timestamp"), errors="coerce")
-    first_kpi = pd.to_datetime(apr_meta.get("first_kpi_date"), errors="coerce")
-    last_kpi = pd.to_datetime(apr_meta.get("last_kpi_date"), errors="coerce")
-    date_candidates = [first_ts, last_ts, first_kpi, last_kpi]
-
-valid_dates = [d for d in date_candidates if pd.notna(d)]
-if not valid_dates:
-    st.warning(f"No date coverage found for APR {selected_apr}.")
+applied_bounds = _resolve_bounds_for_apr(date_bounds, applied_apr)
+if applied_bounds is None:
+    st.warning(f"No date coverage found for APR {applied_apr}.")
     st.stop()
-
-min_date = min(valid_dates).date()
-max_date = max(valid_dates).date()
-
-range_value = st.sidebar.date_input(
-    "Operational time window",
-    value=(min_date, max_date),
-    min_value=min_date,
-    max_value=max_date,
+min_date, max_date = applied_bounds
+applied_start_date, applied_end_date = _clamp_date_range(
+    requested_start=saved_filters.get("start_date"),
+    requested_end=saved_filters.get("end_date"),
+    min_date=min_date,
+    max_date=max_date,
 )
-start_date, end_date = _resolve_date_range(min_date=min_date, max_date=max_date, value=range_value)
+global_bounds = _resolve_bounds_for_apr(date_bounds, "__all__")
+form_min_date, form_max_date = global_bounds if global_bounds is not None else (min_date, max_date)
+
+with st.sidebar.form("filters_form", clear_on_submit=False):
+    form_data_source = st.radio(
+        "Data access mode",
+        options=FILTER_SOURCE_OPTIONS,
+        index=FILTER_SOURCE_OPTIONS.index(applied_data_source),
+    )
+    form_api_url = st.text_input("API endpoint", value=applied_api_url)
+    form_apr = st.selectbox("APR in operation", options=apr_options, index=apr_options.index(applied_apr))
+    form_range = st.date_input(
+        "Operational time window",
+        value=(applied_start_date, applied_end_date),
+        min_value=form_min_date,
+        max_value=form_max_date,
+    )
+    apply_filters = st.form_submit_button("Apply", type="primary")
+
+if apply_filters:
+    next_data_source = str(form_data_source)
+    if next_data_source not in FILTER_SOURCE_OPTIONS:
+        next_data_source = FILTER_SOURCE_OPTIONS[0]
+    next_api_url = _normalize_api_url(form_api_url)
+
+    if next_data_source == "Local Parquet":
+        _, _, next_apr_options, next_date_bounds = load_local_filter_context()
+    else:
+        try:
+            _, next_apr_options, next_date_bounds = load_api_filter_context(next_api_url)
+        except Exception as exc:  # noqa: BLE001
+            st.error(f"Failed to load available APRs from API: {exc}")
+            st.stop()
+
+    if not next_apr_options:
+        st.warning("No APR data found for the selected source.")
+        st.stop()
+
+    next_apr = str(form_apr or next_apr_options[0])
+    if next_apr not in next_apr_options:
+        next_apr = next_apr_options[0]
+
+    next_bounds = _resolve_bounds_for_apr(next_date_bounds, next_apr)
+    if next_bounds is None:
+        st.warning(f"No date coverage found for APR {next_apr}.")
+        st.stop()
+    next_min_date, next_max_date = next_bounds
+    next_start_raw, next_end_raw = _resolve_date_range(next_min_date, next_max_date, form_range)
+    next_start_date, next_end_date = _clamp_date_range(
+        requested_start=next_start_raw,
+        requested_end=next_end_raw,
+        min_date=next_min_date,
+        max_date=next_max_date,
+    )
+
+    st.session_state.applied_filters = {
+        "data_source": next_data_source,
+        "api_url": next_api_url,
+        "apr_id": next_apr,
+        "start_date": next_start_date,
+        "end_date": next_end_date,
+    }
+    st.rerun()
+
+data_source = applied_data_source
+api_url = applied_api_url
+selected_apr = applied_apr
+start_date = applied_start_date
+end_date = applied_end_date
+
+st.session_state.applied_filters = {
+    "data_source": data_source,
+    "api_url": api_url,
+    "apr_id": selected_apr,
+    "start_date": start_date,
+    "end_date": end_date,
+}
 
 if data_source == "Local Parquet":
     silver, gold = _apply_local_filters(
@@ -569,7 +797,7 @@ if data_source == "Local Parquet":
         start_date=start_date,
         end_date=end_date,
     )
-    twin = compute_current_state(apr_id=selected_apr).model_dump()
+    twin = load_local_twin_state(apr_id=selected_apr)
 else:
     try:
         silver, gold, twin = load_api_data(api_url, selected_apr, start_date, end_date)
@@ -580,6 +808,8 @@ else:
 if silver.empty and gold.empty:
     st.warning("No data found for the selected APR and date range.")
     st.stop()
+
+telemetry = _prepare_telemetry_for_dashboard(silver)
 
 status = str(twin.get("system_status", "NO_DATA"))
 freshness = str(twin.get("freshness_status", "NO_DATA"))
@@ -613,7 +843,7 @@ tank_value = twin.get("current_tank_level_pct")
 turbidity_value = twin.get("current_turbidity_ntu")
 
 alert_summaries = _build_alert_summaries(
-    silver_df=silver,
+    silver_df=telemetry,
     gold_df=gold,
     pressure_value=float(pressure_value) if _is_number(pressure_value) else None,
     tank_value=float(tank_value) if _is_number(tank_value) else None,
@@ -641,7 +871,7 @@ else:
     st.success("Current alert feed: no active alerts.")
 
 st.subheader("Executive Summary")
-summary_metrics = _build_executive_summary(silver_df=silver, gold_df=gold, twin=twin)
+summary_metrics = _build_executive_summary(silver_df=telemetry, gold_df=gold, twin=twin)
 summary_cols = st.columns(4)
 for col, metric in zip(summary_cols, summary_metrics):
     col.metric(metric["label"], metric["value"], metric["detail"], delta_color="inverse")
@@ -655,34 +885,37 @@ with st.expander("Daily KPI detail (technical)", expanded=False):
         st.dataframe(kpi_view, use_container_width=True)
 
 st.subheader("Pressure Trend")
-if silver.empty:
+chart_df, chart_resolution = _build_chart_telemetry(telemetry, start_date=start_date, end_date=end_date)
+if chart_df.empty or "pressure_bar" not in chart_df.columns:
     st.info("No telemetry rows available for pressure trend.")
 else:
-    pressure_df = silver[["timestamp", "pressure_bar"]].set_index("timestamp").copy()
+    pressure_df = chart_df[["pressure_bar"]].copy()
     pressure_df["pressure_min_threshold"] = PRESSURE_MIN_BAR
     pressure_df["pressure_max_threshold"] = PRESSURE_MAX_BAR
     st.line_chart(pressure_df)
+    if chart_resolution != "raw":
+        st.caption(f"Trend resolution: {chart_resolution} averages for performance.")
 
 st.subheader("Tank Level Trend")
-if silver.empty:
+if chart_df.empty or "tank_level_pct" not in chart_df.columns:
     st.info("No telemetry rows available for tank trend.")
 else:
-    tank_df = silver[["timestamp", "tank_level_pct"]].set_index("timestamp").copy()
+    tank_df = chart_df[["tank_level_pct"]].copy()
     tank_df["tank_low_threshold"] = TANK_LOW_PCT
     tank_df["tank_critical_threshold"] = TANK_CRITICAL_PCT
     st.line_chart(tank_df)
 
 st.subheader("Turbidity Trend")
-if silver.empty:
+if chart_df.empty or "turbidity_ntu" not in chart_df.columns:
     st.info("No telemetry rows available for turbidity trend.")
 else:
-    turbidity_df = silver[["timestamp", "turbidity_ntu"]].set_index("timestamp").copy()
+    turbidity_df = chart_df[["turbidity_ntu"]].copy()
     turbidity_df["turbidity_alert_threshold"] = TURBIDITY_ALERT_NTU
     turbidity_df["turbidity_critical_threshold"] = TURBIDITY_CRITICAL_NTU
     st.line_chart(turbidity_df)
 
 st.subheader("Incidents and Events")
-incidents_df = _build_incident_table(silver)
+incidents_df = _build_incident_table(telemetry, max_rows=MAX_INCIDENT_ROWS)
 if incidents_df.empty:
     st.success("No incidents detected in the selected time window.")
 else:
@@ -706,6 +939,6 @@ with st.expander("Raw telemetry (secondary view)", expanded=False):
             "is_imputed",
             "batch_id",
         ]
-        available_cols = [col for col in raw_cols if col in silver.columns]
-        raw_view = silver[available_cols].sort_values("timestamp", ascending=False).head(200).copy()
+        available_cols = [col for col in raw_cols if col in telemetry.columns]
+        raw_view = telemetry[available_cols].sort_values("timestamp", ascending=False).head(MAX_RAW_TELEMETRY_ROWS).copy()
         st.dataframe(raw_view, use_container_width=True)
