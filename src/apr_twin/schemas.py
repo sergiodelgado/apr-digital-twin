@@ -18,6 +18,9 @@ class TelemetryRecord(BaseModel):
     timestamp: datetime
     apr_id: str
     sensor_id: str
+    batch_id: str
+    source_file: str
+    processed_at: datetime
     flow_lps: float
     pressure_bar: float
     tank_level_pct: float
@@ -31,6 +34,9 @@ class TelemetryRecord(BaseModel):
 class DailyKPIRecord(BaseModel):
     date: date
     apr_id: str
+    batch_id: str
+    source_file: str
+    processed_at: datetime
     records: int
     avg_flow_lps: float
     daily_volume_m3: float

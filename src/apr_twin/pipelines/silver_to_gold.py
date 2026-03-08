@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -32,6 +33,13 @@ def _expected_count_for_sensor_day(group: pd.DataFrame) -> int:
     return max(1, int(round(span_seconds / interval_seconds)) + 1)
 
 
+def _join_unique(values: pd.Series) -> str:
+    normalized = sorted({str(v).strip() for v in values if pd.notna(v) and str(v).strip()})
+    if not normalized:
+        return "unknown"
+    return "|".join(normalized)
+
+
 def process_silver_to_gold() -> Path:
     cfg = ensure_data_dirs()
     silver_df = read_parquet_file(cfg.silver_file)
@@ -44,6 +52,10 @@ def process_silver_to_gold() -> Path:
     if "is_imputed" not in df.columns:
         df["is_imputed"] = False
     df["is_imputed"] = df["is_imputed"].fillna(False).astype(bool)
+    if "batch_id" not in df.columns:
+        df["batch_id"] = "unknown"
+    if "source_file" not in df.columns:
+        df["source_file"] = "unknown"
 
     df = df.sort_values(["apr_id", "sensor_id", "timestamp"]).reset_index(drop=True)
 
@@ -92,6 +104,8 @@ def process_silver_to_gold() -> Path:
             imputed_count=("is_imputed", "sum"),
             low_pressure_duration_minutes=("low_pressure_minutes", "sum"),
             high_turbidity_duration_minutes=("high_turbidity_minutes", "sum"),
+            batch_id=("batch_id", _join_unique),
+            source_file=("source_file", _join_unique),
         )
         .sort_values(["apr_id", "date"])
     )
@@ -165,6 +179,7 @@ def process_silver_to_gold() -> Path:
 
     daily["turbidity_alert_count"] = daily["turbidity_alert_count"].astype(int)
     daily["records"] = daily["records"].astype(int)
+    daily["processed_at"] = datetime.now(timezone.utc).replace(microsecond=0)
 
     daily = daily.drop(columns=["imputed_count", "expected_records_total"])
 

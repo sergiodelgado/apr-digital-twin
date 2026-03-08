@@ -24,7 +24,14 @@ def read_parquet_dir(directory: Path) -> pd.DataFrame:
     frames: list[pd.DataFrame] = []
     for file_path in files:
         try:
-            frames.append(pd.read_parquet(file_path))
+            frame = pd.read_parquet(file_path)
+            if "source_file" not in frame.columns:
+                frame["source_file"] = file_path.name
+            else:
+                frame["source_file"] = (
+                    frame["source_file"].fillna("").astype(str).str.strip().replace("", file_path.name)
+                )
+            frames.append(frame)
         except Exception as exc:  # noqa: BLE001
             LOGGER.warning("Skipping unreadable parquet file %s: %s", file_path, exc)
 
@@ -38,4 +45,3 @@ def write_parquet(df: pd.DataFrame, path: Path) -> Path:
     df.to_parquet(path, index=False)
     LOGGER.info("Wrote parquet file: %s (%d rows)", path, len(df))
     return path
-

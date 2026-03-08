@@ -24,6 +24,9 @@ def test_api_endpoints(monkeypatch, tmp_path: Path) -> None:
     telemetry_payload = telemetry.json()
     assert isinstance(telemetry_payload, list)
     assert len(telemetry_payload) > 0
+    assert "batch_id" in telemetry_payload[0]
+    assert "source_file" in telemetry_payload[0]
+    assert "processed_at" in telemetry_payload[0]
 
     kpis = client.get("/kpis/daily", params={"days": 10, "apr_id": "APR-API"})
     assert kpis.status_code == 200
@@ -34,6 +37,9 @@ def test_api_endpoints(monkeypatch, tmp_path: Path) -> None:
     assert "imputed_pct" in kpis_payload[0]
     assert "low_pressure_duration_minutes" in kpis_payload[0]
     assert "high_turbidity_duration_minutes" in kpis_payload[0]
+    assert "batch_id" in kpis_payload[0]
+    assert "source_file" in kpis_payload[0]
+    assert "processed_at" in kpis_payload[0]
 
     twin = client.get("/twin/state", params={"apr_id": "APR-API"})
     assert twin.status_code == 200

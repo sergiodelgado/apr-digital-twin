@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 from datetime import datetime, timezone
@@ -64,6 +65,18 @@ def _impute_group(group: pd.DataFrame, numeric_cols: list[str]) -> pd.DataFrame:
     return g
 
 
+def _stable_batch_id(source_files: list[str]) -> str:
+    joined = "|".join(sorted(source_files))
+    digest = hashlib.sha1(joined.encode("utf-8")).hexdigest()[:12]  # noqa: S324
+    return f"batch-{digest}"
+
+
+def _safe_pct(numerator: int, denominator: int) -> float:
+    if denominator == 0:
+        return 0.0
+    return round((numerator / denominator) * 100.0, 4)
+
+
 def process_bronze_to_silver() -> Path:
     cfg = ensure_data_dirs()
     bronze_df = read_parquet_dir(cfg.bronze_dir)
@@ -88,6 +101,16 @@ def process_bronze_to_silver() -> Path:
     df = bronze_df.copy()
     df["rejection_reason"] = ""
     input_rows = len(df)
+    if "source_file" not in df.columns:
+        df["source_file"] = "unknown.parquet"
+    else:
+        df["source_file"] = df["source_file"].fillna("").astype(str).str.strip()
+        df.loc[df["source_file"] == "", "source_file"] = "unknown.parquet"
+    source_files = sorted(df["source_file"].dropna().astype(str).unique().tolist())
+    batch_id = _stable_batch_id(source_files)
+    processed_at = datetime.now(timezone.utc).replace(microsecond=0)
+    df["batch_id"] = batch_id
+    df["processed_at"] = processed_at
 
     df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
     df["apr_id"] = df["apr_id"].fillna("").astype(str).str.strip()
@@ -160,6 +183,9 @@ def process_bronze_to_silver() -> Path:
             "turbidity_alert",
             "is_synthetic",
             "is_imputed",
+            "batch_id",
+            "source_file",
+            "processed_at",
         ]
     ].copy()
 
@@ -181,25 +207,28 @@ def process_bronze_to_silver() -> Path:
     unresolved_rows = int(len(unresolved_rejected))
     silver_rows = int(len(silver_df))
     report = {
-        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-        "source_bronze_dir": str(cfg.bronze_dir),
-        "input_rows": int(input_rows),
-        "silver_rows": silver_rows,
-        "rejected_rows": rejected_rows,
-        "rejection_rate_pct": round((rejected_rows / input_rows) * 100.0, 4) if input_rows else 0.0,
-        "duplicates_removed": int(len(duplicate_rejected)),
-        "unresolved_rows_after_imputation": unresolved_rows,
-        "imputed_rows": imputed_rows,
-        "imputed_pct_of_silver": round((imputed_rows / silver_rows) * 100.0, 4) if silver_rows else 0.0,
-        "max_interpolation_gap_minutes": MAX_INTERPOLATION_GAP_MINUTES,
-        "max_interpolation_steps": MAX_INTERPOLATION_STEPS,
-        "invalid_timestamp_rows": int(invalid_timestamp_mask.sum()),
-        "missing_apr_rows": int(missing_apr_mask.sum()),
-        "missing_sensor_rows": int(missing_sensor_mask.sum()),
-        "out_of_range_counts": out_of_range_counts,
+        "batch_id": batch_id,
+        "processed_at": processed_at.isoformat(),
+        "source_files": source_files,
+        "metrics": {
+            "duplicates_removed": int(len(duplicate_rejected)),
+            "imputed_pct_of_silver": _safe_pct(imputed_rows, silver_rows),
+            "imputed_rows": imputed_rows,
+            "input_rows": int(input_rows),
+            "invalid_timestamp_rows": int(invalid_timestamp_mask.sum()),
+            "max_interpolation_gap_minutes": MAX_INTERPOLATION_GAP_MINUTES,
+            "max_interpolation_steps": MAX_INTERPOLATION_STEPS,
+            "missing_apr_rows": int(missing_apr_mask.sum()),
+            "missing_sensor_rows": int(missing_sensor_mask.sum()),
+            "out_of_range_counts": dict(sorted(out_of_range_counts.items())),
+            "rejected_rows": rejected_rows,
+            "rejection_rate_pct": _safe_pct(rejected_rows, int(input_rows)),
+            "silver_rows": silver_rows,
+            "unresolved_rows_after_imputation": unresolved_rows,
+        },
     }
     cfg.silver_quality_report_file.write_text(
-        json.dumps(report, indent=2),
+        json.dumps(report, indent=2, sort_keys=True),
         encoding="utf-8",
     )
 

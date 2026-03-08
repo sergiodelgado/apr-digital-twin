@@ -38,7 +38,14 @@ def test_end_to_end_pipeline_with_quality_outputs(monkeypatch, tmp_path: Path) -
 
     assert not silver_df.empty
     assert not gold_df.empty
-    assert {"pressure_ok", "turbidity_alert", "is_imputed"}.issubset(silver_df.columns)
+    assert {
+        "pressure_ok",
+        "turbidity_alert",
+        "is_imputed",
+        "batch_id",
+        "source_file",
+        "processed_at",
+    }.issubset(silver_df.columns)
     assert {
         "daily_volume_m3",
         "pressure_ok_ratio",
@@ -47,11 +54,17 @@ def test_end_to_end_pipeline_with_quality_outputs(monkeypatch, tmp_path: Path) -
         "imputed_pct",
         "low_pressure_duration_minutes",
         "high_turbidity_duration_minutes",
+        "batch_id",
+        "source_file",
+        "processed_at",
     }.issubset(gold_df.columns)
 
     report = json.loads(cfg.silver_quality_report_file.read_text(encoding="utf-8"))
-    assert report["input_rows"] >= report["silver_rows"]
-    assert "out_of_range_counts" in report
+    metrics = report["metrics"]
+    assert metrics["input_rows"] >= metrics["silver_rows"]
+    assert "out_of_range_counts" in metrics
+    assert report["batch_id"].startswith("batch-")
+    assert isinstance(report["source_files"], list)
 
     state = compute_current_state(apr_id="APR-TEST")
     assert state.system_status in {"OK", "WARNING", "CRITICAL"}
@@ -223,3 +236,60 @@ def test_twin_freshness_degrades_state(monkeypatch, tmp_path: Path) -> None:
     assert state.data_age_minutes is not None and state.data_age_minutes >= 120
     assert state.system_status == "CRITICAL"
     assert state.confidence <= 0.5
+
+
+def test_batch_lineage_and_quality_metrics_stability(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("APR_DATA_DIR", str(tmp_path / "data"))
+    cfg = ensure_data_dirs()
+
+    t0 = datetime(2026, 1, 2, 10, 0, 0)
+    rows_a = [
+        {
+            "timestamp": t0,
+            "apr_id": "APR-LIN",
+            "sensor_id": "s1",
+            "flow_lps": 2.5,
+            "pressure_bar": 2.2,
+            "tank_level_pct": 61.0,
+            "turbidity_ntu": 0.3,
+            "pump_on": 0,
+            "is_synthetic": True,
+        }
+    ]
+    rows_b = [
+        {
+            "timestamp": t0 + timedelta(minutes=5),
+            "apr_id": "APR-LIN",
+            "sensor_id": "s1",
+            "flow_lps": 2.7,
+            "pressure_bar": 2.3,
+            "tank_level_pct": 60.5,
+            "turbidity_ntu": 0.35,
+            "pump_on": 1,
+            "is_synthetic": True,
+        }
+    ]
+    _write_bronze(cfg.bronze_dir / "batch_a.parquet", rows_a)
+    _write_bronze(cfg.bronze_dir / "batch_b.parquet", rows_b)
+
+    process_bronze_to_silver()
+    first_report = json.loads(cfg.silver_quality_report_file.read_text(encoding="utf-8"))
+    process_bronze_to_silver()
+    second_report = json.loads(cfg.silver_quality_report_file.read_text(encoding="utf-8"))
+    process_silver_to_gold()
+
+    silver_df = read_parquet_file(cfg.silver_file)
+    gold_df = read_parquet_file(cfg.gold_daily_file)
+
+    assert first_report["metrics"] == second_report["metrics"]
+    assert first_report["source_files"] == ["batch_a.parquet", "batch_b.parquet"]
+
+    assert silver_df["batch_id"].nunique() == 1
+    assert silver_df["batch_id"].iloc[0] == first_report["batch_id"]
+    assert set(silver_df["source_file"].unique().tolist()) == {"batch_a.parquet", "batch_b.parquet"}
+    assert silver_df["processed_at"].notna().all()
+
+    assert not gold_df.empty
+    assert set(gold_df["batch_id"].unique().tolist()) == {first_report["batch_id"]}
+    assert set(gold_df["source_file"].unique().tolist()) == {"batch_a.parquet|batch_b.parquet"}
+    assert gold_df["processed_at"].notna().all()

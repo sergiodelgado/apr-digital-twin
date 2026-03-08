@@ -25,6 +25,17 @@ def _load_silver() -> pd.DataFrame:
         return df
     df = df.copy()
     df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+    if "processed_at" not in df.columns:
+        df["processed_at"] = pd.NaT
+    df["processed_at"] = pd.to_datetime(df["processed_at"], errors="coerce", utc=True).dt.tz_convert(None)
+    if "batch_id" not in df.columns:
+        df["batch_id"] = "unknown"
+    if "source_file" not in df.columns:
+        df["source_file"] = "unknown"
+    df["batch_id"] = df["batch_id"].fillna("").astype(str).str.strip().replace("", "unknown")
+    df["source_file"] = df["source_file"].fillna("").astype(str).str.strip().replace("", "unknown")
+    fallback_processed = pd.Timestamp.now().floor("s")
+    df["processed_at"] = df["processed_at"].fillna(fallback_processed)
     return df.dropna(subset=["timestamp"])
 
 
@@ -35,6 +46,17 @@ def _load_gold_daily() -> pd.DataFrame:
         return df
     df = df.copy()
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    if "processed_at" not in df.columns:
+        df["processed_at"] = pd.NaT
+    df["processed_at"] = pd.to_datetime(df["processed_at"], errors="coerce", utc=True).dt.tz_convert(None)
+    if "batch_id" not in df.columns:
+        df["batch_id"] = "unknown"
+    if "source_file" not in df.columns:
+        df["source_file"] = "unknown"
+    df["batch_id"] = df["batch_id"].fillna("").astype(str).str.strip().replace("", "unknown")
+    df["source_file"] = df["source_file"].fillna("").astype(str).str.strip().replace("", "unknown")
+    fallback_processed = pd.Timestamp.now().floor("s")
+    df["processed_at"] = df["processed_at"].fillna(fallback_processed)
     return df.dropna(subset=["date"])
 
 
@@ -78,6 +100,9 @@ def telemetry_recent(
                 timestamp=pd.Timestamp(row["timestamp"]).to_pydatetime(),
                 apr_id=str(row["apr_id"]),
                 sensor_id=str(row["sensor_id"]),
+                batch_id=str(row["batch_id"]),
+                source_file=str(row["source_file"]),
+                processed_at=pd.Timestamp(row["processed_at"]).to_pydatetime(),
                 flow_lps=float(row["flow_lps"]),
                 pressure_bar=float(row["pressure_bar"]),
                 tank_level_pct=float(row["tank_level_pct"]),
@@ -113,6 +138,9 @@ def kpis_daily(
             DailyKPIRecord(
                 date=pd.Timestamp(row["date"]).date(),
                 apr_id=str(row["apr_id"]),
+                batch_id=str(row["batch_id"]),
+                source_file=str(row["source_file"]),
+                processed_at=pd.Timestamp(row["processed_at"]).to_pydatetime(),
                 records=int(row["records"]),
                 avg_flow_lps=float(row["avg_flow_lps"]),
                 daily_volume_m3=float(row["daily_volume_m3"]),
