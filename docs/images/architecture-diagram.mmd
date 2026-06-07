@@ -1,0 +1,24 @@
+flowchart LR
+    subgraph local["Local-first MVP boundary"]
+        direction LR
+
+        synthetic["Synthetic telemetry\nsrc/apr_twin/synthetic/generator.py"]
+        bronze["Bronze layer\nRaw telemetry Parquet\ndata/bronze/"]
+        silver["Silver layer\nCleaned telemetry + quality outputs\ndata/silver/"]
+        gold["Gold layer\nDaily KPI Parquet\ndata/gold/"]
+        twin["Twin Engine\nExplainable state, reason codes,\nconfidence, alerts, recommendations"]
+        api["FastAPI service\nHealth, APR catalog,\ntelemetry, KPI, twin endpoints"]
+        dashboard["Streamlit dashboard\nOperational snapshot,\ntrends, incidents"]
+
+        synthetic --> bronze --> silver --> gold --> twin --> api --> dashboard
+        silver --> twin
+        gold --> api
+        silver --> api
+        silver -. Local Parquet mode .-> dashboard
+        gold -. Local Parquet mode .-> dashboard
+    end
+
+    storage["Local Parquet storage\nAPR_DATA_DIR override supported"]
+    bronze --- storage
+    silver --- storage
+    gold --- storage

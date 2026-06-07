@@ -8,6 +8,8 @@ The format is based on Keep a Changelog and this project follows semantic versio
 
 ### Added
 
+- Versionable architecture diagram source and rendered SVG under `docs/images/`.
+- Real local dashboard screenshots under `docs/images/` for README visual documentation.
 - Documentation structure under `docs/`:
   - `architecture/`
   - `demos/`
@@ -25,6 +27,7 @@ The format is based on Keep a Changelog and this project follows semantic versio
 
 ### Changed
 
+- `README.md` now embeds the architecture diagram and local dashboard preview screenshots.
 - `README.md` reorganized for public GitHub readiness with clearer overview, quick start, expected result, architecture, demo scenarios, documentation links, operations commands, tests, maturity, limitations, and roadmap sections.
 - Demo execution flow clarified with local setup, scenario preparation, API startup, dashboard startup, and expected local URLs.
 - Technical documentation links expanded to existing architecture, demo, operations, roadmap, changelog, and current technical state report documentation, including `docs/reports/estado-tecnico-actual.md`.
