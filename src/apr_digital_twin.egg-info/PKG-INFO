@@ -4,6 +4,7 @@ Version: 0.1.0
 Summary: Local MVP digital twin for APR telemetry processing and visualization.
 Requires-Python: >=3.11
 Description-Content-Type: text/markdown
+License-File: LICENSE
 Requires-Dist: fastapi<1.0,>=0.115
 Requires-Dist: uvicorn[standard]<1.0,>=0.30
 Requires-Dist: streamlit<2.0,>=1.40
@@ -14,31 +15,110 @@ Requires-Dist: pydantic<3.0,>=2.8
 Requires-Dist: requests<3.0,>=2.32
 Requires-Dist: pytest<9.0,>=8.3
 Requires-Dist: httpx<1.0,>=0.27
+Dynamic: license-file
 
 # APR Digital Twin MVP (Local)
 
-Local MVP for a digital twin platform for rural drinking water systems (APR).
-Everything runs inside this repository with local Parquet files.
+Local MVP for a digital twin platform for rural drinking water systems (APR), fully runnable from this repository.
 
-## What this MVP includes
+## Project Purpose
 
-- Synthetic telemetry generator into `data/bronze/`
-- Bronze -> Silver cleaning and validation pipeline
-- Silver -> Gold daily KPI pipeline
-- Internal digital twin state engine (Python module)
-- FastAPI service layer
-- Streamlit dashboard
-- Basic tests for pipeline and API
+This project demonstrates a practical, explainable digital twin workflow for APR operations:
 
-## Project structure
+- ingest telemetry (synthetic in MVP mode)
+- process quality-controlled operational data
+- compute operational KPIs and twin state
+- present insights through API and dashboard for demo and validation
+
+The MVP is intentionally local-first and file-based to keep setup simple, reproducible, and presentation-ready.
+
+## MVP Architecture
+
+Architecture is preserved as a single-repo local pipeline:
+
+1. Synthetic telemetry generation writes Bronze Parquet files.
+2. Bronze to Silver pipeline validates/cleans telemetry.
+3. Silver to Gold pipeline computes daily KPIs.
+4. Twin engine evaluates current state, reason codes, confidence, and recommendation.
+5. FastAPI exposes telemetry/KPI/twin endpoints.
+6. Streamlit dashboard visualizes operational state and trends.
+
+Core modules:
+
+- `src/apr_twin/synthetic/generator.py`
+- `src/apr_twin/pipelines/bronze_to_silver.py`
+- `src/apr_twin/pipelines/silver_to_gold.py`
+- `src/apr_twin/twin/engine.py`
+- `src/apr_twin/api/main.py`
+- `src/apr_twin/dashboard/app.py`
+
+Additional architecture docs:
+
+- `docs/architecture/mvp-architecture.md`
+- `docs/architecture/data-flow.md`
+
+## Demo Workflow
+
+### Setup
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e .
+```
+
+### Full Local Demo (3 Terminals)
+
+- Terminal A: scenario preparation and resets
+- Terminal B: API
+- Terminal C: dashboard
+
+Terminal A (first run):
+
+```powershell
+python scripts/demo_workflow.py prepare --scenario normal --apr-id APR-001 --days 7 --freq-minutes 5
+```
+
+Terminal B:
+
+```powershell
+python scripts/demo_workflow.py api --port 8000
+```
+
+Terminal C:
+
+```powershell
+python scripts/demo_workflow.py dashboard --port 8501
+```
+
+Open `http://localhost:8501` and use:
+
+- `Data access mode`: `API`
+- `API endpoint`: `http://127.0.0.1:8000`
+- `APR in operation`: `APR-001`
+
+Scenario playbook:
+
+- `docs/demos/demo-workflow.md`
+- `docs/demos/scenario-playbook.md`
+
+## Repository Structure
 
 ```text
+.agents/
+  automations/
+  skills/
 data/
   bronze/
   silver/
   gold/
-pyproject.toml
+docs/
+  architecture/
+  demos/
+  operations/
+  roadmap/
 scripts/
+  demo_workflow.py
   run_mvp.py
 src/
   apr_twin/
@@ -50,49 +130,59 @@ src/
     twin/
     utils/
 tests/
+CHANGELOG.md
+README.md
 ```
 
-## Setup
+## Skills and Automations
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -e .
-```
+Repository-local assistant assets are under `.agents/`:
 
-## Run local batch flow
+### Skills (`.agents/skills/`)
+
+- `apr-demo-run`: run and control the standard local demo sequence.
+- `apr-pipeline-audit`: audit Bronze/Silver/Gold artifacts and data quality.
+- `apr-dashboard-review`: verify dashboard behavior and API-connected demo readiness.
+- `apr-twin-evaluation`: evaluate scenario outcomes vs twin rules and thresholds.
+
+### Automation Prompt Templates (`.agents/automations/`)
+
+- `daily-health-check.md`: daily local health/status prompt template.
+- `repo-briefing.md`: periodic implementation and readiness briefing template.
+- `weekly-twin-audit.md`: weekly scenario-based twin behavior audit template.
+
+These templates are intentionally architecture-safe and scoped to the current local MVP.
+
+## Operations Quick Commands
+
+Run end-to-end local batch:
 
 ```powershell
 python scripts/run_mvp.py --days 7 --freq-minutes 5 --apr-id APR-001
 ```
 
-This command generates telemetry and produces:
-
-- Bronze: `data/bronze/*.parquet`
-- Silver: `data/silver/telemetry_silver.parquet`
-- Gold: `data/gold/daily_kpis.parquet`
-
-## Start API
+Manual pipeline:
 
 ```powershell
-uvicorn apr_twin.api.main:app --reload --port 8000
+python -m apr_twin.synthetic.generator --days 7 --freq-minutes 5 --apr-id APR-001
+python -m apr_twin.pipelines.bronze_to_silver
+python -m apr_twin.pipelines.silver_to_gold
 ```
 
-## Start dashboard
+API health checks:
 
 ```powershell
-python -m streamlit run src/apr_twin/dashboard/app.py
+Invoke-RestMethod http://127.0.0.1:8000/health
+Invoke-RestMethod "http://127.0.0.1:8000/twin/state?apr_id=APR-001"
 ```
 
-## Run tests
+Tests:
 
 ```powershell
 python -m pytest -q
 ```
 
-## Optional data directory override
-
-Set `APR_DATA_DIR` to use another local data folder:
+Optional data override:
 
 ```powershell
 $env:APR_DATA_DIR = "C:\temp\apr-data"
