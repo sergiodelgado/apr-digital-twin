@@ -51,10 +51,12 @@ export default function Home() {
     if (!aprs || aprs.length === 0 || filters.aprId) return;
     const first = aprs[0];
     const bounds = dateBoundsFor(first);
-    setFilters({
-      aprId: first.apr_id,
-      startDate: bounds?.min ?? "",
-      endDate: bounds?.max ?? "",
+    Promise.resolve().then(() => {
+      setFilters({
+        aprId: first.apr_id,
+        startDate: bounds?.min ?? "",
+        endDate: bounds?.max ?? "",
+      });
     });
   }, [aprs, filters.aprId]);
 
