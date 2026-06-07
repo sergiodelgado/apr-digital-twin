@@ -168,7 +168,7 @@ describe("buildChartSeries", () => {
       pressure_bar: i % 2 === 0 ? 2.0 : 1.0,
       tank_level_pct: 50.0,
       turbidity_ntu: 1.0,
-    } as any));
+    } as unknown as TelemetryRecord));
 
     const series = buildChartSeries(largeTelemetry);
     expect(series.length).toBeLessThanOrEqual(600);
