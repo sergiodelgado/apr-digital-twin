@@ -78,11 +78,23 @@ After a successful local run:
 - KPI and telemetry views are populated from the local synthetic demo data.
 - Twin outputs include supported explainability fields such as confidence, reason codes, possible root cause, active alerts, and operational recommendations.
 
+### Dashboard Preview
+
+The following screenshots were captured from the running local Streamlit dashboard using synthetic demo data for `APR-001`.
+
+![APR dashboard overview](docs/images/dashboard-overview.png)
+
+![APR dashboard operational recommendation and alert overview](docs/images/dashboard-twin-state.png)
+
 ## Architecture
 
 ```text
 Synthetic Telemetry -> Bronze -> Silver -> Gold -> Twin Engine -> API -> Dashboard
 ```
+
+### Architecture Diagram
+
+![APR Digital Twin MVP architecture diagram](docs/images/architecture-diagram.svg)
 
 - Synthetic Telemetry: `src/apr_twin/synthetic/generator.py` creates local synthetic APR telemetry for demo and scenario runs.
 - Bronze: raw synthetic telemetry is written as local Parquet files under `data/bronze/`.

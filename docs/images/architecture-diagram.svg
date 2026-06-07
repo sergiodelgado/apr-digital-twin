@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="520" viewBox="0 0 1280 520" role="img" aria-labelledby="title desc">
+  <title id="title">APR Digital Twin MVP architecture</title>
+  <desc id="desc">Local-first architecture diagram showing synthetic telemetry flowing through Bronze, Silver, Gold, Twin Engine, FastAPI, and Streamlit dashboard components using local Parquet storage.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#334155"/>
+    </marker>
+    <marker id="arrow-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+    <style>
+      .page { fill: #f8fafc; }
+      .boundary { fill: #ffffff; stroke: #cbd5e1; stroke-width: 2; rx: 14; }
+      .box { fill: #ffffff; stroke: #334155; stroke-width: 1.8; rx: 8; }
+      .box-accent { fill: #f0f9ff; stroke: #0369a1; stroke-width: 1.8; rx: 8; }
+      .box-data { fill: #f8fafc; stroke: #475569; stroke-width: 1.8; rx: 8; }
+      .storage { fill: #ecfdf5; stroke: #047857; stroke-width: 1.8; rx: 8; }
+      .title { font: 700 24px Arial, Helvetica, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 14px Arial, Helvetica, sans-serif; fill: #475569; }
+      .label { font: 700 16px Arial, Helvetica, sans-serif; fill: #0f172a; }
+      .small { font: 400 12.5px Arial, Helvetica, sans-serif; fill: #334155; }
+      .tiny { font: 400 11.5px Arial, Helvetica, sans-serif; fill: #475569; }
+      .arrow { stroke: #334155; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+      .muted-arrow { stroke: #64748b; stroke-width: 1.8; stroke-dasharray: 6 5; fill: none; marker-end: url(#arrow-muted); }
+      .storage-line { stroke: #047857; stroke-width: 1.7; stroke-dasharray: 4 5; fill: none; }
+    </style>
+  </defs>
+
+  <rect class="page" x="0" y="0" width="1280" height="520"/>
+  <text class="title" x="52" y="48">APR Digital Twin MVP Architecture</text>
+  <text class="subtitle" x="52" y="72">Local Python processes and local Parquet files; no external services required for the MVP demo.</text>
+
+  <rect class="boundary" x="42" y="104" width="1196" height="312"/>
+  <text class="subtitle" x="64" y="130">Local-first MVP boundary</text>
+
+  <rect class="box-accent" x="70" y="170" width="140" height="112"/>
+  <text class="label" x="92" y="202">Synthetic</text>
+  <text class="label" x="92" y="222">Telemetry</text>
+  <text class="small" x="92" y="250">Demo scenarios</text>
+  <text class="tiny" x="92" y="268">generator.py</text>
+
+  <rect class="box-data" x="250" y="170" width="132" height="112"/>
+  <text class="label" x="284" y="202">Bronze</text>
+  <text class="small" x="274" y="230">Raw telemetry</text>
+  <text class="small" x="286" y="250">Parquet</text>
+  <text class="tiny" x="280" y="268">data/bronze</text>
+
+  <rect class="box-data" x="422" y="170" width="146" height="112"/>
+  <text class="label" x="466" y="202">Silver</text>
+  <text class="small" x="446" y="230">Cleaned data</text>
+  <text class="small" x="438" y="250">Quality outputs</text>
+  <text class="tiny" x="458" y="268">data/silver</text>
+
+  <rect class="box-data" x="608" y="170" width="132" height="112"/>
+  <text class="label" x="642" y="202">Gold</text>
+  <text class="small" x="634" y="230">Daily KPIs</text>
+  <text class="small" x="644" y="250">Parquet</text>
+  <text class="tiny" x="640" y="268">data/gold</text>
+
+  <rect class="box" x="780" y="160" width="156" height="132"/>
+  <text class="label" x="817" y="193">Twin Engine</text>
+  <text class="small" x="810" y="222">State + freshness</text>
+  <text class="small" x="805" y="242">Reason codes</text>
+  <text class="small" x="804" y="262">Confidence, alerts,</text>
+  <text class="small" x="804" y="280">recommendations</text>
+
+  <rect class="box" x="976" y="170" width="132" height="112"/>
+  <text class="label" x="998" y="202">FastAPI</text>
+  <text class="small" x="1004" y="230">Health, APRs,</text>
+  <text class="small" x="1004" y="250">telemetry, KPI,</text>
+  <text class="small" x="1004" y="270">twin state</text>
+
+  <rect class="box-accent" x="1148" y="170" width="66" height="112"/>
+  <text class="label" x="1160" y="202">UI</text>
+  <text class="small" x="1160" y="230">Streamlit</text>
+  <text class="tiny" x="1160" y="250">Dashboard</text>
+
+  <path class="arrow" d="M 210 226 L 248 226"/>
+  <path class="arrow" d="M 382 226 L 420 226"/>
+  <path class="arrow" d="M 568 226 L 606 226"/>
+  <path class="arrow" d="M 740 226 L 778 226"/>
+  <path class="arrow" d="M 936 226 L 974 226"/>
+  <path class="arrow" d="M 1108 226 L 1146 226"/>
+
+  <path class="muted-arrow" d="M 495 282 C 560 350 725 350 825 292"/>
+  <text class="tiny" x="610" y="357">Silver/Gold context for explainability</text>
+
+  <path class="muted-arrow" d="M 495 282 C 660 382 984 382 1168 284"/>
+  <text class="tiny" x="770" y="392">Optional Local Parquet dashboard mode</text>
+
+  <rect class="storage" x="422" y="438" width="436" height="54"/>
+  <text class="label" x="464" y="462">Local Parquet Storage</text>
+  <text class="small" x="464" y="482">Repository data directory or APR_DATA_DIR override</text>
+  <path class="storage-line" d="M 316 282 L 508 438"/>
+  <path class="storage-line" d="M 495 282 L 590 438"/>
+  <path class="storage-line" d="M 674 282 L 674 438"/>
+</svg>
