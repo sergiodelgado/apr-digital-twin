@@ -25,7 +25,10 @@ The format is based on Keep a Changelog and this project follows semantic versio
 
 ### Changed
 
-- `README.md` rewritten to be presentation-ready with clear sections for project purpose, MVP architecture, demo workflow, repository structure, and `.agents` assets.
+- `README.md` reorganized for public GitHub readiness with clearer overview, quick start, expected result, architecture, demo scenarios, documentation links, operations commands, tests, maturity, limitations, and roadmap sections.
+- Demo execution flow clarified with local setup, scenario preparation, API startup, dashboard startup, and expected local URLs.
+- Technical documentation links expanded to existing architecture, demo, operations, roadmap, changelog, and current technical state report documentation, including `docs/reports/estado-tecnico-actual.md`.
+- Current MVP maturity and limitations clarified to avoid presenting the local synthetic-telemetry MVP as production-ready.
 
 ## [0.1.0] - 2026-03-08
 
