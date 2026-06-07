@@ -10,7 +10,7 @@ import type { TelemetryRecord, DailyKPIRecord, TwinState } from "../lib/types";
 // Mock constant values to align with lib/constants.ts thresholds
 // PRESSURE_MIN_BAR = 1.5, TANK_LOW_PCT = 25.0, TURBIDITY_ALERT_NTU = 2.0
 
-const mockTelemetry: TelemetryRecord[] = [
+const mockTelemetry = [
   {
     timestamp: "2026-06-07T08:00:00Z",
     flow_lps: 5.0,
@@ -39,9 +39,9 @@ const mockTelemetry: TelemetryRecord[] = [
     tank_level_pct: 55.0,   // Recovered
     turbidity_ntu: 0.8,     // Recovered
   },
-];
+] as unknown as TelemetryRecord[];
 
-const mockGold: DailyKPIRecord[] = [
+const mockGold = [
   {
     date: "2026-06-07",
     apr_id: "APR-001",
@@ -56,9 +56,9 @@ const mockGold: DailyKPIRecord[] = [
     low_pressure_duration_minutes: 10.0,
     high_turbidity_duration_minutes: 10.0,
   },
-];
+] as unknown as DailyKPIRecord[];
 
-const mockTwin: TwinState = {
+const mockTwin = {
   apr_id: "APR-001",
   status: "WARNING",
   freshness_status: "FRESH",
@@ -74,7 +74,7 @@ const mockTwin: TwinState = {
   possible_root_cause: "Operation normal",
   recommendation: "Routine check",
   reason_codes: [],
-};
+} as unknown as TwinState;
 
 describe("buildAlertSummaries", () => {
   it("computes active alerts, events count and severity correctly", () => {
