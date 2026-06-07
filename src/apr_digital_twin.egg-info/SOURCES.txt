@@ -1,3 +1,4 @@
+LICENSE
 README.md
 pyproject.toml
 src/apr_digital_twin.egg-info/PKG-INFO
@@ -22,7 +23,9 @@ src/apr_twin/synthetic/__init__.py
 src/apr_twin/synthetic/generator.py
 src/apr_twin/twin/__init__.py
 src/apr_twin/twin/engine.py
+src/apr_twin/twin/taxonomy.py
 src/apr_twin/utils/__init__.py
 src/apr_twin/utils/logging_utils.py
 tests/test_api.py
 tests/test_pipeline.py
+tests/test_scenarios.py
