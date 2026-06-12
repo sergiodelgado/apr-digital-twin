@@ -1,27 +1,47 @@
-flowchart LR
-    subgraph local["Local-first MVP boundary"]
-        direction LR
+%%{init: {'theme': 'base', 'themeVariables': {'clusterBkg': '#f8fafc', 'clusterBorder': '#cbd5e1', 'fontSize': '15px'}}}%%
+flowchart TB
+    classDef gen    fill:#fef9c3,stroke:#ca8a04,color:#713f12
+    classDef brnz   fill:#ffedd5,stroke:#ea580c,color:#7c2d12
+    classDef slvr   fill:#e0f2fe,stroke:#0284c7,color:#075985
+    classDef gld    fill:#fefce8,stroke:#d97706,color:#78350f
+    classDef twn    fill:#f5f3ff,stroke:#7c3aed,color:#3b0764
+    classDef svc    fill:#dcfce7,stroke:#16a34a,color:#14532d
+    classDef fe     fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
+    classDef dash   fill:#fdf4ff,stroke:#a21caf,color:#701a75
+    classDef stor   fill:#f1f5f9,stroke:#64748b,color:#334155
 
-        synthetic["Synthetic telemetry\nsrc/apr_twin/synthetic/generator.py"]
-        bronze["Bronze layer\nRaw telemetry Parquet\ndata/bronze/"]
-        silver["Silver layer\nCleaned telemetry + quality outputs\ndata/silver/"]
-        gold["Gold layer\nDaily KPI Parquet\ndata/gold/"]
-        twin["Twin Engine\nExplainable state, reason codes,\nconfidence, alerts, recommendations"]
-        api["FastAPI service\nHealth, APR catalog,\ntelemetry, KPI, twin endpoints"]
-        frontend["Next.js control room\nDark-theme UI · SWR polling\ncharts, KPIs, alerts, recommendations"]
-        dashboard["Streamlit dashboard\nOperational snapshot,\ntrends, incidents"]
+    subgraph local["Local-first MVP boundary"]
+        direction TB
+
+        synthetic["Synthetic Telemetry\nsrc/apr_twin/synthetic/generator.py"]:::gen
+
+        bronze["Bronze\nRaw telemetry Parquet · data/bronze/"]:::brnz
+
+        silver["Silver\nCleaned telemetry + quality outputs · data/silver/"]:::slvr
+
+        gold["Gold\nDaily KPI Parquet · data/gold/"]:::gld
+
+        twin["Twin Engine\nExplainable state · reason codes · confidence · alerts · recommendations"]:::twn
+
+        api["FastAPI Service\nHealth · APR catalog · telemetry · KPI · twin endpoints"]:::svc
+
+        subgraph presentation["Presentation layer"]
+            direction LR
+            frontend["Next.js Control Room\nDark UI · SWR polling\ncharts · KPIs · alerts · recommendations"]:::fe
+            dashboard["Streamlit Dashboard\nOperational snapshot\ntrends · incidents"]:::dash
+        end
+
+        storage[("Local Parquet Storage\nAPR_DATA_DIR override")]:::stor
 
         synthetic --> bronze --> silver --> gold --> twin --> api
+        silver -.-> twin
+        gold -.-> api
+        silver -.-> api
         api --> frontend
         api --> dashboard
-        silver --> twin
-        gold --> api
-        silver --> api
-        silver -. Local Parquet mode .-> dashboard
-        gold -. Local Parquet mode .-> dashboard
+        silver -. Local Parquet .-> dashboard
+        gold -. Local Parquet .-> dashboard
+        bronze --- storage
+        silver --- storage
+        gold --- storage
     end
-
-    storage["Local Parquet storage\nAPR_DATA_DIR override supported"]
-    bronze --- storage
-    silver --- storage
-    gold --- storage
