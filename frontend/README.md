@@ -84,3 +84,7 @@ The frontend calls the FastAPI backend at `http://localhost:8000` (configured in
 ## Type Contract
 
 `lib/types.ts` mirrors the Pydantic schemas in `src/apr_twin/schemas.py`. Keep them in sync when adding or changing API fields.
+
+## Roadmap
+
+See [ROADMAP.md](./ROADMAP.md) for the prioritized feature and architecture plan.
