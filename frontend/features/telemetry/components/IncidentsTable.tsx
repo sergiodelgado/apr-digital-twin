@@ -1,10 +1,10 @@
 "use client";
 
 import { formatDateTime } from "@/lib/format";
-import type { Incident, Severity } from "@/lib/telemetry";
-import { Badge, Card } from "./ui/primitives";
+import { Badge, Card } from "@/components/ui/primitives";
+import type { Incident, Severity } from "../types";
 
-const SEVERITY_ES: Record<Severity, string> = {
+const SEVERITY_LABEL: Record<Severity, string> = {
   OK: "OK",
   WARNING: "Advertencia",
   CRITICAL: "Crítica",
@@ -43,7 +43,7 @@ export function IncidentsTable({ incidents }: { incidents: Incident[] }) {
                 <td className="px-4 py-2.5 text-muted">{formatDateTime(inc.timestamp)}</td>
                 <td className="px-4 py-2.5 text-foreground">{inc.event}</td>
                 <td className="px-4 py-2.5">
-                  <Badge tone={inc.severity}>{SEVERITY_ES[inc.severity]}</Badge>
+                  <Badge tone={inc.severity}>{SEVERITY_LABEL[inc.severity]}</Badge>
                 </td>
                 <td className="px-4 py-2.5 font-medium text-foreground">{inc.observedValue}</td>
                 <td className="px-4 py-2.5 text-muted">{inc.threshold}</td>

@@ -1,9 +1,9 @@
 "use client";
 
-import type { AlertSummary, Severity } from "@/lib/telemetry";
-import { Badge, Card } from "./ui/primitives";
+import { Badge, Card } from "@/components/ui/primitives";
+import type { AlertSummary, Severity } from "../types";
 
-const SEVERITY_ES: Record<Severity, string> = {
+const SEVERITY_LABEL: Record<Severity, string> = {
   OK: "OK",
   WARNING: "Advertencia",
   CRITICAL: "Crítica",
@@ -25,9 +25,7 @@ function AlertCard({ summary }: { summary: AlertSummary }) {
         </div>
         <div className="flex justify-between">
           <dt className="text-muted">Severidad máxima</dt>
-          <dd>
-            <Badge tone={summary.maxSeverity}>{SEVERITY_ES[summary.maxSeverity]}</Badge>
-          </dd>
+          <dd><Badge tone={summary.maxSeverity}>{SEVERITY_LABEL[summary.maxSeverity]}</Badge></dd>
         </div>
         <div className="flex justify-between">
           <dt className="text-muted">Duración</dt>

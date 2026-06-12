@@ -10,7 +10,7 @@ import type {
   RiskLevel,
   SystemStatus,
   TankConsistency,
-} from "./types";
+} from "@/lib/types";
 
 export const SYSTEM_STATUS_ES: Record<SystemStatus, string> = {
   OK: "Operativo",

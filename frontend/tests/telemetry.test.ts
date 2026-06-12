@@ -1,10 +1,6 @@
 import { describe, it, expect } from "vitest";
-import {
-  buildAlertSummaries,
-  buildExecutiveSummary,
-  buildIncidents,
-  buildChartSeries,
-} from "../lib/telemetry";
+import { buildAlertSummaries, buildExecutiveSummary } from "../features/twin-state/lib/transform";
+import { buildIncidents, buildChartSeries } from "../features/telemetry/lib/transform";
 import type { TelemetryRecord, DailyKPIRecord, TwinState } from "../lib/types";
 
 // Mock constant values to align with lib/constants.ts thresholds

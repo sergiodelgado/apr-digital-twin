@@ -3,7 +3,7 @@
 import { MAX_RAW_ROWS } from "@/lib/constants";
 import { formatDateTime, formatNumber } from "@/lib/format";
 import type { TelemetryRecord } from "@/lib/types";
-import { Card } from "./ui/primitives";
+import { Card } from "@/components/ui/primitives";
 
 export function RawTelemetry({ telemetry }: { telemetry: TelemetryRecord[] }) {
   const rows = [...telemetry]

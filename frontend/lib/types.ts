@@ -1,5 +1,8 @@
-// Tipos espejo de src/apr_twin/schemas.py (modelos Pydantic de la API FastAPI).
-// Si cambian los schemas del backend, actualizar aquí.
+// Mirror types of src/apr_twin/schemas.py (FastAPI Pydantic models).
+// Keep in sync when backend schemas change.
+
+// UI-level severity shared across features.
+export type Severity = "OK" | "WARNING" | "CRITICAL";
 
 export type SystemStatus = "OK" | "WARNING" | "CRITICAL" | "NO_DATA";
 export type FreshnessStatus = "FRESH" | "STALE" | "OUTDATED" | "NO_DATA";

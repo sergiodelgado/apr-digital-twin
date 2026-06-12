@@ -1,6 +1,8 @@
 "use client";
 
 import { formatPercent } from "@/lib/format";
+import { Badge, Card } from "@/components/ui/primitives";
+import type { TwinState } from "@/lib/types";
 import {
   ALERT_ES,
   CONFIDENCE_ES,
@@ -8,9 +10,7 @@ import {
   RECOMMENDATION_ES,
   ROOT_CAUSE_ES,
   t,
-} from "@/lib/i18n";
-import type { TwinState } from "@/lib/types";
-import { Badge, Card } from "./ui/primitives";
+} from "../lib/i18n";
 
 export function RecommendationCard({ twin }: { twin: TwinState }) {
   const recommendation = t(RECOMMENDATION_ES, twin.operational_recommendation);
@@ -21,12 +21,12 @@ export function RecommendationCard({ twin }: { twin: TwinState }) {
     <Card>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <h3 className="text-base font-semibold text-foreground">Recomendación operacional</h3>
-        <Badge tone="INFO">Confianza: {CONFIDENCE_ES[twin.confidence]} · {formatPercent(twin.confidence_score)}</Badge>
+        <Badge tone="INFO">
+          Confianza: {CONFIDENCE_ES[twin.confidence]} · {formatPercent(twin.confidence_score)}
+        </Badge>
       </div>
 
-      <p className="mt-3 text-foreground">
-        {recommendation || "Sin recomendación disponible."}
-      </p>
+      <p className="mt-3 text-foreground">{recommendation || "Sin recomendación disponible."}</p>
 
       {rootCause ? (
         <p className="mt-2 text-sm text-muted">

@@ -1,7 +1,6 @@
 // Primitivas de interfaz reutilizables para la sala de control (tema oscuro).
 import type { ReactNode } from "react";
-import type { Severity } from "@/lib/telemetry";
-import type { FreshnessStatus, SystemStatus } from "@/lib/types";
+import type { FreshnessStatus, Severity, SystemStatus } from "@/lib/types";
 
 type Tone = Severity | "INFO" | "NEUTRAL";
 
