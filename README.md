@@ -8,88 +8,75 @@ The current MVP uses synthetic telemetry. It does not connect to field sensors o
 
 ## Quick Start
 
-Minimum Python version: Python 3.11 or newer.
+Minimum Python version: Python 3.11 or newer. Minimum Node.js version: 18 or newer.
 
 Clone the repository:
 
-```powershell
+```bash
 git clone https://github.com/sergiodelgado/apr-digital-twin.git
 cd apr-digital-twin
 ```
 
-Create and activate a virtual environment in Windows PowerShell:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
-
-Linux or WSL alternative:
+Create and activate a virtual environment:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate   # macOS / Linux
+# .\.venv\Scripts\Activate.ps1  # Windows PowerShell
 ```
 
-Install the project in editable mode:
+Install the Python project in editable mode:
 
-```powershell
-python -m pip install -e .
+```bash
+python3 -m pip install -e .
 ```
 
 Prepare demo data:
 
-```powershell
-python scripts/demo_workflow.py prepare --scenario normal --apr-id APR-001 --days 7 --freq-minutes 5
+```bash
+python3 scripts/demo_workflow.py prepare --scenario normal --apr-id APR-001 --days 7 --freq-minutes 5
 ```
 
-Start the API in a second terminal:
+Install frontend dependencies:
 
-```powershell
-python scripts/demo_workflow.py api --port 8000
+```bash
+npm --prefix frontend install
 ```
 
-Start the dashboard in a third terminal:
+Start all three services, each in its own terminal:
 
-```powershell
-python scripts/demo_workflow.py dashboard --port 8501
+```bash
+# Terminal 1 — FastAPI backend
+python3 scripts/demo_workflow.py api --port 8000
+
+# Terminal 2 — Next.js frontend
+npm --prefix frontend run dev
+
+# Terminal 3 — Streamlit dashboard (optional)
+python3 scripts/demo_workflow.py dashboard --port 8501
 ```
 
 Open:
 
-- FastAPI: `http://127.0.0.1:8000`
+- Next.js control room: `http://localhost:3000`
 - FastAPI interactive docs: `http://127.0.0.1:8000/docs`
-- Streamlit dashboard: `http://localhost:8501`
-
-In the dashboard, use:
-
-- `Data access mode`: `API`
-- `API endpoint`: `http://127.0.0.1:8000`
-- `APR in operation`: `APR-001`
+- Streamlit dashboard (optional): `http://localhost:8501`
 
 ## Expected Result
 
 After a successful local run:
 
+- The Next.js control room is available at `http://localhost:3000`.
 - FastAPI is available at `http://127.0.0.1:8000`.
-- The Streamlit dashboard is available at `http://localhost:8501`.
-- Demo APR `APR-001` is available/selectable.
-- The dashboard shows an operational status for the selected APR.
+- The Streamlit dashboard (optional) is available at `http://localhost:8501`.
+- Demo APR `APR-001` is available/selectable in both UIs.
 - KPI and telemetry views are populated from the local synthetic demo data.
-- Twin outputs include supported explainability fields such as confidence, reason codes, possible root cause, active alerts, and operational recommendations.
-
-### Dashboard Preview
-
-The following screenshots were captured from the running local Streamlit dashboard using synthetic demo data for `APR-001`.
-
-![APR dashboard overview](docs/images/dashboard-overview.png)
-
-![APR dashboard operational recommendation and alert overview](docs/images/dashboard-twin-state.png)
+- Twin outputs include explainability fields: confidence, reason codes, possible root cause, active alerts, and operational recommendations.
 
 ## Architecture
 
 ```text
-Synthetic Telemetry -> Bronze -> Silver -> Gold -> Twin Engine -> API -> Dashboard
+Synthetic Telemetry -> Bronze -> Silver -> Gold -> Twin Engine -> API -> Next.js / Streamlit
 ```
 
 ### Architecture Diagram
@@ -102,7 +89,8 @@ Synthetic Telemetry -> Bronze -> Silver -> Gold -> Twin Engine -> API -> Dashboa
 - Gold: `src/apr_twin/pipelines/silver_to_gold.py` computes daily operational KPIs from Silver telemetry.
 - Twin Engine: `src/apr_twin/twin/engine.py` evaluates current operational state, freshness, confidence, reason codes, hydraulic signals, and recommendations.
 - API: `src/apr_twin/api/main.py` exposes health, APR availability, telemetry, KPI, and twin-state endpoints through FastAPI.
-- Dashboard: `src/apr_twin/dashboard/app.py` visualizes the operational state and trends using local Parquet data or the API.
+- Next.js frontend: `frontend/` is the primary operational control room UI — dark-themed, built with Next.js 15, Tailwind CSS v4, SWR, and Recharts.
+- Streamlit dashboard: `src/apr_twin/dashboard/app.py` is an alternative local visualization layer using local Parquet data or the API.
 
 The MVP is local and file-based. It uses local Python processes and local Parquet storage, with `APR_DATA_DIR` available as an optional data directory override.
 
@@ -145,6 +133,11 @@ docs/
   operations/
   reports/
   roadmap/
+frontend/                   # Next.js 15 control room UI
+  app/                      # App Router pages and layout
+  components/               # React components (charts, cards, tables)
+  lib/                      # API fetchers, types, utilities
+  tests/                    # Vitest test files
 scripts/
   demo_workflow.py
   run_mvp.py
@@ -161,6 +154,7 @@ tests/
 CHANGELOG.md
 README.md
 pyproject.toml
+vercel.json
 ```
 
 ## Technical Documentation
@@ -180,54 +174,66 @@ pyproject.toml
 
 Run the end-to-end local batch flow:
 
-```powershell
-python scripts/run_mvp.py --days 7 --freq-minutes 5 --apr-id APR-001
+```bash
+python3 scripts/run_mvp.py --days 7 --freq-minutes 5 --apr-id APR-001
 ```
 
 Run the manual pipeline steps:
 
-```powershell
-python -m apr_twin.synthetic.generator --days 7 --freq-minutes 5 --apr-id APR-001
-python -m apr_twin.pipelines.bronze_to_silver
-python -m apr_twin.pipelines.silver_to_gold
+```bash
+python3 -m apr_twin.synthetic.generator --days 7 --freq-minutes 5 --apr-id APR-001
+python3 -m apr_twin.pipelines.bronze_to_silver
+python3 -m apr_twin.pipelines.silver_to_gold
 ```
 
-Start API and dashboard through the demo helper:
+Start backend and frontend:
 
-```powershell
-python scripts/demo_workflow.py api --port 8000
-python scripts/demo_workflow.py dashboard --port 8501
+```bash
+python3 scripts/demo_workflow.py api --port 8000
+npm --prefix frontend run dev
+```
+
+Start Streamlit dashboard (optional):
+
+```bash
+python3 scripts/demo_workflow.py dashboard --port 8501
 ```
 
 Equivalent direct commands:
 
-```powershell
+```bash
 uvicorn apr_twin.api.main:app --reload --port 8000
-python -m streamlit run src/apr_twin/dashboard/app.py
+python3 -m streamlit run src/apr_twin/dashboard/app.py
 ```
 
 API health checks:
 
-```powershell
-Invoke-RestMethod http://127.0.0.1:8000/health
-Invoke-RestMethod "http://127.0.0.1:8000/twin/state?apr_id=APR-001"
+```bash
+curl http://127.0.0.1:8000/health
+curl "http://127.0.0.1:8000/twin/state?apr_id=APR-001"
 ```
 
 Optional data directory override:
 
-```powershell
-$env:APR_DATA_DIR = "C:\temp\apr-data"
+```bash
+export APR_DATA_DIR=/tmp/apr-data
 ```
 
 ## Tests
 
-Run the automated test suite:
+Run the Python test suite:
 
-```powershell
-python -m pytest -q
+```bash
+python3 -m pytest -q
 ```
 
-The tests cover pipeline behavior, API endpoints, and scenario-specific twin logic.
+Run the frontend test suite:
+
+```bash
+npm --prefix frontend run test:run
+```
+
+Python tests cover pipeline behavior, API endpoints, and scenario-specific twin logic. Frontend tests use Vitest and Testing Library.
 
 ## Current Maturity / Limitations
 
@@ -239,6 +245,7 @@ Implemented capabilities:
 - Daily KPI generation.
 - Explainable twin state with status, freshness, confidence, reason codes, hydraulic signals, possible root cause, active alerts, and recommendations.
 - FastAPI endpoints for health, available APRs, recent telemetry, daily KPIs, and twin state.
+- Next.js 15 operational control room with dark theme, real-time SWR polling, trend charts, KPI cards, alert overview, incident table, and recommendation panel.
 - Streamlit dashboard with local Parquet mode and API mode.
 - Demo scenarios for normal operation, stale data, pressure, turbidity, projected low tank level, and hydraulic behavior.
 
