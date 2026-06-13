@@ -13,9 +13,14 @@ export async function fetcher<T>(url: string): Promise<T> {
 
 /**
  * Shared SWR configuration applied to all API data hooks.
- * Disables revalidation on window focus to avoid noise during operational monitoring.
+ * Disables focus revalidation and caps retries to keep API outages visible and recoverable.
  */
-export const SWR_CONFIG = { revalidateOnFocus: false } as const;
+export const SWR_CONFIG = {
+  revalidateOnFocus: false,
+  errorRetryCount: 2,
+  errorRetryInterval: 3000,
+  shouldRetryOnError: true,
+} as const;
 
 /**
  * Converts an object of query parameters into a URL query string.

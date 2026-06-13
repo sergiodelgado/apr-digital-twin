@@ -19,11 +19,11 @@ export function AprCard({ apr }: { apr: AvailableAPRRecord }) {
         <p className="text-xl font-bold text-foreground">{apr.apr_id}</p>
         <dl className="mt-3 space-y-1.5 text-sm">
           <div className="flex justify-between">
-            <dt className="text-muted">Telemetry records</dt>
+            <dt className="text-muted">Registros de telemetría</dt>
             <dd className="font-medium text-foreground">{apr.telemetry_records}</dd>
           </div>
           <div className="flex justify-between">
-            <dt className="text-muted">Last telemetry</dt>
+            <dt className="text-muted">Última telemetría</dt>
             <dd className="font-medium text-foreground">
               {apr.last_telemetry_timestamp
                 ? formatDateTime(apr.last_telemetry_timestamp)
@@ -31,7 +31,7 @@ export function AprCard({ apr }: { apr: AvailableAPRRecord }) {
             </dd>
           </div>
           <div className="flex justify-between">
-            <dt className="text-muted">KPI records</dt>
+            <dt className="text-muted">Registros KPI</dt>
             <dd className="font-medium text-foreground">{apr.kpi_records}</dd>
           </div>
         </dl>

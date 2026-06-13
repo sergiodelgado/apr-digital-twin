@@ -25,7 +25,12 @@ import { buildChartSeries, buildIncidents } from '@/features/telemetry/lib/trans
  *   - `handleFilterChange` — Callback to apply explicit user date overrides.
  */
 export function useControlRoom(aprId: string) {
-  const { data: aprs } = useAvailableAprs();
+  const {
+    data: aprs,
+    error: catalogError,
+    isLoading: catalogLoading,
+    mutate: mutateCatalog,
+  } = useAvailableAprs();
 
   /** Stores only the user's explicit date selections; empty strings mean "use bounds default". */
   const [userDates, setUserDates] = useState<{ startDate: string; endDate: string }>({
@@ -62,13 +67,27 @@ export function useControlRoom(aprId: string) {
   const telemetryStart = filters.startDate ? `${filters.startDate}T00:00:00` : null;
   const telemetryEnd = filters.endDate ? `${filters.endDate}T23:59:59` : null;
 
-  const { data: twin } = useTwinState(aprId);
-  const { data: telemetry, isLoading: telLoading } = useTelemetry(
+  const {
+    data: twin,
+    error: twinError,
+    isLoading: twinLoading,
+    mutate: mutateTwin,
+  } = useTwinState(aprId);
+  const {
+    data: telemetry,
+    error: telemetryError,
+    isLoading: telLoading,
+    mutate: mutateTelemetry,
+  } = useTelemetry(
     aprId,
     telemetryStart,
     telemetryEnd,
   );
-  const { data: kpis } = useDailyKpis(aprId, filters.startDate || null, filters.endDate || null);
+  const {
+    data: kpis,
+    error: kpisError,
+    mutate: mutateKpis,
+  } = useDailyKpis(aprId, filters.startDate || null, filters.endDate || null);
 
   const tel = useMemo(() => telemetry ?? [], [telemetry]);
   const gold = useMemo(() => kpis ?? [], [kpis]);
@@ -81,13 +100,22 @@ export function useControlRoom(aprId: string) {
   return {
     filters,
     bounds,
+    catalogError,
+    catalogLoading,
     twin,
+    twinError,
+    twinLoading,
     tel,
     telLoading,
+    telemetryError,
+    kpisError,
     chartData,
     alertSummaries,
     execSummary,
     incidents,
     handleFilterChange,
+    retryCatalog: () => void mutateCatalog(),
+    retryTwin: () => void mutateTwin(),
+    retryHistory: () => void Promise.all([mutateTelemetry(), mutateKpis()]),
   };
 }

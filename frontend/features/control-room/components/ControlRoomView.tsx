@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { AlertOverview } from '@/features/twin-state/components/AlertOverview';
 import { ExecutiveSummary } from '@/features/twin-state/components/ExecutiveSummary';
 import { OperationalSnapshot } from '@/features/twin-state/components/OperationalSnapshot';
@@ -7,7 +8,7 @@ import { RecommendationCard } from '@/features/twin-state/components/Recommendat
 import { IncidentsTable } from '@/features/telemetry/components/IncidentsTable';
 import { RawTelemetry } from '@/features/telemetry/components/RawTelemetry';
 import { TrendChart } from '@/features/telemetry/components/TrendChart';
-import { Section } from '@/components/ui/primitives';
+import { Section, StatusPanel } from '@/components/ui/primitives';
 import {
   PRESSURE_MAX_BAR,
   PRESSURE_MIN_BAR,
@@ -32,20 +33,38 @@ export function ControlRoomView({ aprId }: { aprId: string }) {
   const {
     filters,
     bounds,
+    catalogError,
+    catalogLoading,
     twin,
+    twinError,
+    twinLoading,
     tel,
     telLoading,
+    telemetryError,
+    kpisError,
     chartData,
     alertSummaries,
     execSummary,
     incidents,
     handleFilterChange,
+    retryCatalog,
+    retryTwin,
+    retryHistory,
   } = useControlRoom(aprId);
+
+  const historyError = telemetryError || kpisError;
+  const hasDateRange = Boolean(filters.startDate && filters.endDate);
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-border pb-5">
         <div>
+          <Link
+            href="/"
+            className="mb-2 inline-flex text-sm font-medium text-sky-300 transition-colors hover:text-sky-200"
+          >
+            Volver al catálogo
+          </Link>
           <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
             {aprId}
           </h1>
@@ -56,17 +75,49 @@ export function ControlRoomView({ aprId }: { aprId: string }) {
       </header>
 
       <div className="space-y-8">
+        {catalogError ? (
+          <StatusPanel
+            title="Cobertura histórica no disponible"
+            message="El estado actual del gemelo sigue accesible. Selecciona un rango manual para consultar históricos o reintenta el catálogo."
+            tone="WARNING"
+            onRetry={retryCatalog}
+          />
+        ) : null}
+
         <FiltersBar filters={filters} bounds={bounds} onChange={handleFilterChange} />
 
-        {!twin ? (
+        {!catalogLoading && !bounds && !hasDateRange ? (
+          <StatusPanel
+            title="Selecciona un rango de fechas"
+            message="No hay cobertura automática disponible para este APR. Define las fechas para cargar telemetría y KPI."
+          />
+        ) : null}
+
+        {twinError ? (
+          <StatusPanel
+            title="Estado del gemelo no disponible"
+            message="La API no pudo entregar el estado operacional de este APR."
+            tone="ERROR"
+            onRetry={retryTwin}
+          />
+        ) : twinLoading ? (
           <LoadingBox message="Cargando estado del gemelo…" />
-        ) : (
+        ) : twin ? (
           <>
             <Section title="Panorama operacional">
               <OperationalSnapshot twin={twin} />
             </Section>
 
             <RecommendationCard twin={twin} />
+
+            {historyError ? (
+              <StatusPanel
+                title="Históricos parcialmente disponibles"
+                message="Falló la carga de telemetría o KPI para el rango seleccionado. El estado actual permanece visible."
+                tone="WARNING"
+                onRetry={retryHistory}
+              />
+            ) : null}
 
             <Section
               title="Situación de alertas"
@@ -130,7 +181,7 @@ export function ControlRoomView({ aprId }: { aprId: string }) {
               <RawTelemetry telemetry={tel} />
             </Section>
           </>
-        )}
+        ) : null}
       </div>
 
       <footer className="mt-10 border-t border-border pt-4 text-center text-xs text-muted">

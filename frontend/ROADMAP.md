@@ -8,10 +8,10 @@ This roadmap is scoped to the Next.js frontend and aligns with the [project MVP 
 
 ### 1. Component test coverage
 
-Only `format.ts` and `telemetry.ts` are currently tested. Extend coverage to:
+Transform helpers, API utilities, catalog navigation, and control-room failure states are covered. Extend coverage to:
 
 - React components: `AlertOverview`, `RecommendationCard`, `ExecutiveSummary`
-- SWR hooks in `lib/api.ts`: mock responses, assert loading / error / data states
+- SWR hooks: mock responses and assert cache/revalidation behavior
 - Edge cases: `null` twin state fields, stale data, empty telemetry arrays
 
 Tests should be co-located with their feature once the feature-based structure (item 5) is in place.
@@ -31,9 +31,9 @@ Tests should be co-located with their feature once the feature-based structure (
 
 SWR has `revalidateOnFocus: false` everywhere and no polling interval. Add a configurable refresh toggle (e.g. every 30 s) surfaced as a UI control — important for live demo sessions where the backend receives new telemetry.
 
-### 5. Feature-based architecture + App Router pages
+### 5. Feature-based architecture + App Router pages (completed)
 
-The current flat `components/` structure and monolithic `page.tsx` will become a maintenance problem as the app grows. Refactor before adding more surface area.
+Implemented with an APR catalog at `/`, per-APR control rooms at `/aprs/[apr_id]`, and domain-owned components, hooks, and transforms under `features/`.
 
 **Target structure:**
 

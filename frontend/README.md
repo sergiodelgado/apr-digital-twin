@@ -1,6 +1,6 @@
 # APR Digital Twin — Frontend
 
-Next.js 15 frontend for the APR Digital Twin operational control room. Connects to the local FastAPI backend and displays real-time telemetry, KPI summaries, trend charts, alerts, and explainable twin recommendations for rural drinking water (APR) systems.
+Next.js 16 frontend for the APR Digital Twin operational control room. Connects to the local FastAPI backend and displays telemetry, KPI summaries, trend charts, alerts, and explainable twin recommendations for rural drinking water (APR) systems.
 
 ## Quick Start
 
@@ -34,7 +34,7 @@ The FastAPI backend must be running on port 8000. See the [root README](../READM
 
 | Layer | Choice |
 |---|---|
-| Framework | Next.js 15 (App Router) |
+| Framework | Next.js 16 (App Router) |
 | Language | TypeScript (strict) |
 | Styling | Tailwind CSS v4 |
 | Data fetching | SWR |
@@ -46,37 +46,31 @@ The FastAPI backend must be running on port 8000. See the [root README](../READM
 
 ```
 app/
-  layout.tsx          # Root layout — Geist font, global CSS
-  page.tsx            # Main dashboard page (Client Component)
-components/
-  AlertOverview.tsx   # KPI alert cards (pressure, level, quality, telemetry)
-  ExecutiveSummary.tsx  # Compliance metric summary cards
-  FiltersBar.tsx      # APR selector and date range controls
-  IncidentsTable.tsx  # Event and incident log table
-  OperationalSnapshot.tsx  # Status chips (connectivity, freshness, etc.)
-  RawTelemetry.tsx    # Raw telemetry detail table
-  RecommendationCard.tsx   # Twin recommendation with confidence score
-  TrendChart.tsx      # Recharts time-series chart wrapper
-  ui/
-    primitives.tsx    # Shared low-level UI primitives
+  layout.tsx                    # Root layout and local Geist fonts
+  page.tsx                      # APR catalog
+  aprs/[apr_id]/page.tsx        # Per-APR control room route
+components/ui/                  # Shared stateless UI primitives
+features/
+  aprs/                         # Catalog, cards, availability hooks
+  control-room/                 # Dashboard composition and orchestration
+  telemetry/                    # Charts, incidents, raw data and transforms
+  twin-state/                   # Twin state, alerts, recommendations and i18n
 lib/
-  api.ts              # SWR fetchers and API URL helpers
-  constants.ts        # Threshold constants and config values
-  format.ts           # Number and date formatting utilities
-  i18n.ts             # Spanish UI string constants
-  telemetry.ts        # Telemetry data transformation helpers
-  types.ts            # TypeScript interfaces matching FastAPI schemas
-tests/                # Vitest test files
+  api/fetcher.ts                # Fetcher, query strings and SWR policy
+  constants.ts                  # Operational thresholds
+  format.ts                     # es-CL number and date formatting
+  types.ts                      # Interfaces matching FastAPI schemas
+tests/                          # Vitest unit and route-state tests
 ```
 
 ## API Integration
 
-The frontend calls the FastAPI backend at `http://localhost:8000` (configured in `lib/api.ts`). Key endpoints consumed:
+The browser calls the same-origin `/api/apr/*` proxy configured in `next.config.ts`. Next.js forwards requests to `http://127.0.0.1:8000` by default; override it with `APR_API_URL`.
 
 | Endpoint | Used by |
 |---|---|
 | `GET /health` | Connectivity status chip |
-| `GET /aprs/available` | APR selector dropdown |
+| `GET /available_aprs` | APR catalog and historical date bounds |
 | `GET /telemetry/recent?apr_id=` | Trend charts, raw telemetry table |
 | `GET /kpis/daily?apr_id=` | Executive summary, KPI cards |
 | `GET /twin/state?apr_id=` | Recommendation card, alert overview |

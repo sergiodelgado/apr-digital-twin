@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { FreshnessStatus, Severity, SystemStatus } from '@/lib/types';
 
 type Tone = Severity | 'INFO' | 'NEUTRAL';
+type NoticeTone = 'ERROR' | 'WARNING' | 'INFO';
 
 /** Color classes (text + background + border) indexed by tone, used in Badge and accent elements. */
 const TONE_BADGE: Record<Tone, string> = {
@@ -10,6 +11,12 @@ const TONE_BADGE: Record<Tone, string> = {
   CRITICAL: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
   INFO: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
   NEUTRAL: 'bg-slate-500/15 text-slate-300 border-slate-500/30',
+};
+
+const NOTICE_STYLES: Record<NoticeTone, string> = {
+  ERROR: 'border-rose-500/30 bg-rose-500/10 text-rose-100',
+  WARNING: 'border-amber-500/30 bg-amber-500/10 text-amber-100',
+  INFO: 'border-sky-500/30 bg-sky-500/10 text-sky-100',
 };
 
 /**
@@ -167,4 +174,38 @@ export function freshnessTone(freshness: FreshnessStatus): Tone {
  */
 export function severityTone(severity: Severity): Tone {
   return severity;
+}
+
+/** Inline operational notice for expected loading and API failure states. */
+export function StatusPanel({
+  title,
+  message,
+  tone = 'INFO',
+  onRetry,
+}: {
+  title: string;
+  message: string;
+  tone?: NoticeTone;
+  onRetry?: () => void;
+}) {
+  return (
+    <div
+      role={tone === 'ERROR' ? 'alert' : 'status'}
+      className={`flex flex-wrap items-center justify-between gap-4 rounded-lg border p-4 ${NOTICE_STYLES[tone]}`}
+    >
+      <div>
+        <p className="text-sm font-semibold">{title}</p>
+        <p className="mt-1 text-sm opacity-80">{message}</p>
+      </div>
+      {onRetry ? (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="shrink-0 rounded-md border border-current/30 px-3 py-2 text-sm font-semibold transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
+        >
+          Reintentar
+        </button>
+      ) : null}
+    </div>
+  );
 }

@@ -21,7 +21,7 @@ This file defines the development commands and code conventions specifically for
 ### React Components (Next.js & React 19)
 - **Component Style**: Functional components with TypeScript props typing.
 - **Client vs Server**: By default, Next.js components are server components. Add `"use client"` at the top of files that require browser hooks (`useState`, `useEffect`, SWR, event handlers).
-- **Structure**: Reusable UI primitives in `components/ui/`, feature/page components in `components/`.
+- **Structure**: Reusable UI primitives in `components/ui/`; domain components, hooks, and transforms in `features/`.
 
 ### Styling (Tailwind CSS v4)
 - Use Tailwind CSS v4 styling rules.

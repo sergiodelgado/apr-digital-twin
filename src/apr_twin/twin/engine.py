@@ -360,7 +360,7 @@ def _compute_confidence_score(
 def _empty_state(
     apr_id: str | None,
     *,
-    reason_code: str = "NO_DATA_SILVER",
+    reason_code: str = ReasonCode.TELEMETRY_NO_DATA,
     recommendation: str = "Validate data availability before issuing operational decisions.",
 ) -> TwinState:
     reason_codes = [reason_code] if reason_code else []
@@ -407,7 +407,7 @@ def compute_current_state(apr_id: str | None = None) -> TwinState:
         LOGGER.warning("APR id %s not found in Silver data.", selected_apr)
         return _empty_state(
             selected_apr,
-            reason_code="APR_NOT_FOUND_IN_SILVER",
+            reason_code=ReasonCode.APR_NOT_FOUND,
             recommendation="Select an APR with telemetry coverage in the current Silver dataset.",
         )
 
@@ -487,65 +487,73 @@ def compute_current_state(apr_id: str | None = None) -> TwinState:
     reason_codes: list[str] = []
     if pressure_low:
         alerts.append("Low pressure")
-        _append_reason(reason_codes, "PRESSURE_LOW")
+        _append_reason(reason_codes, ReasonCode.PRESSURE_LOW)
     if pressure_critical:
-        _append_reason(reason_codes, "PRESSURE_CRITICAL")
+        _append_reason(reason_codes, ReasonCode.PRESSURE_CRITICAL)
 
     if tank_low:
         alerts.append("Low tank level")
-        _append_reason(reason_codes, "TANK_LOW")
+        _append_reason(reason_codes, ReasonCode.TANK_LOW)
     if tank_critical:
-        _append_reason(reason_codes, "TANK_CRITICAL")
+        _append_reason(reason_codes, ReasonCode.TANK_CRITICAL)
     if projected_tank_low:
         alerts.append("Projected low tank level in 2 hours")
-        _append_reason(reason_codes, "PROJECTED_TANK_LOW_2H")
+        _append_reason(reason_codes, ReasonCode.TANK_PROJECTED_LOW_2H)
     if projected_tank_critical:
         alerts.append("Projected critical tank level in 2 hours")
-        _append_reason(reason_codes, "PROJECTED_TANK_CRITICAL_2H")
+        _append_reason(reason_codes, ReasonCode.TANK_PROJECTED_CRITICAL_2H)
 
     if pump_on_no_recovery:
         alerts.append("Pump on but tank level not recovering")
-        _append_reason(reason_codes, "HYDRAULIC_PUMP_ON_NO_RECOVERY")
+        _append_reason(reason_codes, ReasonCode.PUMP_NO_RECOVERY)
     if abnormal_drop_warn:
         alerts.append("Abnormal tank drop rate")
-        _append_reason(reason_codes, "HYDRAULIC_ABNORMAL_TANK_DROP_RATE")
+        _append_reason(reason_codes, ReasonCode.TANK_DROP_WARN)
     if abnormal_drop_critical:
-        _append_reason(reason_codes, "HYDRAULIC_ABNORMAL_TANK_DROP_RATE_CRITICAL")
+        _append_reason(reason_codes, ReasonCode.TANK_DROP_CRITICAL)
     if low_pressure_with_normal_storage:
         alerts.append("Low pressure with normal storage")
-        _append_reason(reason_codes, "HYDRAULIC_LOW_PRESSURE_WITH_NORMAL_STORAGE")
+        _append_reason(reason_codes, ReasonCode.PRESSURE_LOW_NORMAL_STORAGE)
     if projected_depletion_insufficient_recovery:
         alerts.append("Projected depletion risk with insufficient recovery")
-        _append_reason(reason_codes, "HYDRAULIC_PROJECTED_DEPLETION_INSUFFICIENT_RECOVERY")
+        _append_reason(reason_codes, ReasonCode.DEPLETION_WEAK_RECOVERY)
     if tank_sensor_erratic:
         alerts.append("Noisy or erratic tank level signal")
-        _append_reason(reason_codes, "HYDRAULIC_TANK_SENSOR_ERRATIC")
+        _append_reason(reason_codes, ReasonCode.TANK_SENSOR_ERRATIC)
 
     if tank_balance_consistency == "WATCH":
-        _append_reason(reason_codes, "HYDRAULIC_BALANCE_WATCH")
+        _append_reason(reason_codes, ReasonCode.HYDRAULIC_BALANCE_WATCH)
     elif tank_balance_consistency == "INCONSISTENT":
-        _append_reason(reason_codes, "HYDRAULIC_BALANCE_INCONSISTENT")
+        _append_reason(reason_codes, ReasonCode.HYDRAULIC_BALANCE_INCONSISTENT)
     if hydraulic_risk in {"MEDIUM", "HIGH"}:
-        _append_reason(reason_codes, f"HYDRAULIC_RISK_{hydraulic_risk}")
+        risk_reason = {
+            "MEDIUM": ReasonCode.HYDRAULIC_RISK_MEDIUM,
+            "HIGH": ReasonCode.HYDRAULIC_RISK_HIGH,
+        }[hydraulic_risk]
+        _append_reason(reason_codes, risk_reason)
 
     if turbidity_high:
         alerts.append("High turbidity")
-        _append_reason(reason_codes, "TURBIDITY_HIGH")
+        _append_reason(reason_codes, ReasonCode.TURBIDITY_HIGH)
     if turbidity_critical:
-        _append_reason(reason_codes, "TURBIDITY_CRITICAL")
+        _append_reason(reason_codes, ReasonCode.TURBIDITY_CRITICAL)
 
     if pressure_compliance_ratio is not None and pressure_compliance_ratio < 0.95:
         alerts.append("Pressure compliance below target")
-        _append_reason(reason_codes, "PRESSURE_COMPLIANCE_BELOW_TARGET")
+        _append_reason(reason_codes, ReasonCode.PRESSURE_COMPLIANCE_LOW)
     if risk_level in {"MEDIUM", "HIGH"}:
         alerts.append(f"Daily risk level: {risk_level}")
-        _append_reason(reason_codes, f"DAILY_RISK_{risk_level}")
+        daily_risk_reason = {
+            "MEDIUM": ReasonCode.KPI_RISK_MEDIUM,
+            "HIGH": ReasonCode.KPI_RISK_HIGH,
+        }[risk_level]
+        _append_reason(reason_codes, daily_risk_reason)
     if data_completeness_state == "WATCH":
-        _append_reason(reason_codes, "DATA_COMPLETENESS_WATCH")
+        _append_reason(reason_codes, ReasonCode.DATA_QUALITY_WATCH)
     elif data_completeness_state == "AT_RISK":
-        _append_reason(reason_codes, "DATA_COMPLETENESS_AT_RISK")
+        _append_reason(reason_codes, ReasonCode.DATA_QUALITY_AT_RISK)
     elif data_completeness_state == "UNKNOWN":
-        _append_reason(reason_codes, "DATA_COMPLETENESS_UNKNOWN")
+        _append_reason(reason_codes, ReasonCode.DATA_QUALITY_UNKNOWN)
 
     if turbidity_critical or tank_critical or projected_tank_critical or pressure_critical or hydraulic_risk == "HIGH":
         status = "CRITICAL"
@@ -556,12 +564,12 @@ def compute_current_state(apr_id: str | None = None) -> TwinState:
 
     if freshness_status == "STALE":
         alerts.append("Telemetry data is stale")
-        _append_reason(reason_codes, "FRESHNESS_STALE")
+        _append_reason(reason_codes, ReasonCode.FRESHNESS_STALE)
         if status == "OK":
             status = "WARNING"
     elif freshness_status == "OUTDATED":
         alerts.append("Telemetry data is outdated")
-        _append_reason(reason_codes, "FRESHNESS_OUTDATED")
+        _append_reason(reason_codes, ReasonCode.FRESHNESS_OUTDATED)
         if status in {"OK", "WARNING"}:
             status = "CRITICAL"
 
@@ -624,5 +632,4 @@ def compute_current_state(apr_id: str | None = None) -> TwinState:
         turbidity_alert_active=current_turbidity > TURBIDITY_ALERT_NTU,
         active_alerts=alerts,
     )
-
 
