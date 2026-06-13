@@ -1,15 +1,22 @@
-// Tipos espejo de src/apr_twin/schemas.py (modelos Pydantic de la API FastAPI).
-// Si cambian los schemas del backend, actualizar aquí.
+/**
+ * Mirror types of `src/apr_twin/schemas.py (FastAPI Pydantic models).
+ * Keep in sync when backend schemas change.
+ */
 
-export type SystemStatus = "OK" | "WARNING" | "CRITICAL" | "NO_DATA";
-export type FreshnessStatus = "FRESH" | "STALE" | "OUTDATED" | "NO_DATA";
-export type RiskLevel = "LOW" | "MEDIUM" | "HIGH";
-export type Confidence = "LOW" | "MEDIUM" | "HIGH";
-export type HydraulicRisk = "LOW" | "MEDIUM" | "HIGH" | "UNKNOWN";
-export type TankConsistency = "CONSISTENT" | "WATCH" | "INCONSISTENT" | "UNKNOWN";
+/**
+ * UI-level severity shared across features.
+ */
+export type Severity = 'OK' | 'WARNING' | 'CRITICAL';
+
+export type SystemStatus = 'OK' | 'WARNING' | 'CRITICAL' | 'NO_DATA';
+export type FreshnessStatus = 'FRESH' | 'STALE' | 'OUTDATED' | 'NO_DATA';
+export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH';
+export type Confidence = 'LOW' | 'MEDIUM' | 'HIGH';
+export type HydraulicRisk = 'LOW' | 'MEDIUM' | 'HIGH' | 'UNKNOWN';
+export type TankConsistency = 'CONSISTENT' | 'WATCH' | 'INCONSISTENT' | 'UNKNOWN';
 
 export interface HealthResponse {
-  status: "ok" | "warning";
+  status: 'ok' | 'warning';
   bronze_files: number;
   silver_rows: number;
   gold_rows: number;

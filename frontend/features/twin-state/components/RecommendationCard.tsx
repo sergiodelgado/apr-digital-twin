@@ -1,6 +1,8 @@
-"use client";
+'use client';
 
-import { formatPercent } from "@/lib/format";
+import { formatPercent } from '@/lib/format';
+import { Badge, Card } from '@/components/ui/primitives';
+import type { TwinState } from '@/lib/types';
 import {
   ALERT_ES,
   CONFIDENCE_ES,
@@ -8,10 +10,17 @@ import {
   RECOMMENDATION_ES,
   ROOT_CAUSE_ES,
   t,
-} from "@/lib/i18n";
-import type { TwinState } from "@/lib/types";
-import { Badge, Card } from "./ui/primitives";
+} from '../lib/i18n';
 
+/**
+ * Card presenting the twin's operational recommendation, probable root cause,
+ * active reason codes, and live alert badges — all translated to Spanish via the i18n module.
+ *
+ * Confidence level and score are shown in an INFO badge to convey explainability context
+ * without overwhelming the primary recommendation text.
+ *
+ * @param twin - Current twin state containing the recommendation, root cause, and alert data.
+ */
 export function RecommendationCard({ twin }: { twin: TwinState }) {
   const recommendation = t(RECOMMENDATION_ES, twin.operational_recommendation);
   const rootCause = t(ROOT_CAUSE_ES, twin.possible_root_cause);
@@ -21,12 +30,12 @@ export function RecommendationCard({ twin }: { twin: TwinState }) {
     <Card>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <h3 className="text-base font-semibold text-foreground">Recomendación operacional</h3>
-        <Badge tone="INFO">Confianza: {CONFIDENCE_ES[twin.confidence]} · {formatPercent(twin.confidence_score)}</Badge>
+        <Badge tone="INFO">
+          Confianza: {CONFIDENCE_ES[twin.confidence]} · {formatPercent(twin.confidence_score)}
+        </Badge>
       </div>
 
-      <p className="mt-3 text-foreground">
-        {recommendation || "Sin recomendación disponible."}
-      </p>
+      <p className="mt-3 text-foreground">{recommendation || 'Sin recomendación disponible.'}</p>
 
       {rootCause ? (
         <p className="mt-2 text-sm text-muted">

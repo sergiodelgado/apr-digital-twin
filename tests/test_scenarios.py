@@ -8,6 +8,7 @@ from apr_twin.pipelines.bronze_to_silver import process_bronze_to_silver
 from apr_twin.pipelines.silver_to_gold import process_silver_to_gold
 from apr_twin.synthetic.generator import DEMO_SCENARIOS, generate_bronze_telemetry
 from apr_twin.twin.engine import compute_current_state
+from apr_twin.twin.taxonomy import REASON_CODE_CATALOG
 
 
 def test_required_hydraulic_demo_scenarios_available() -> None:
@@ -74,6 +75,6 @@ def test_hydraulic_enrichment_scenarios_trigger_expected_logic(
     state = compute_current_state(apr_id="APR-SCEN")
 
     assert expected_reason_code in state.reason_codes
+    assert set(state.reason_codes).issubset(REASON_CODE_CATALOG)
     assert state.possible_root_cause is not None
     assert expected_root_cause_text in state.possible_root_cause
-

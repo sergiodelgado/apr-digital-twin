@@ -22,13 +22,17 @@ This document outlines instructions and architectural rules for AI agents modify
 
 ## 2. Directory Layout
 
-- `app/`: Next.js App Router root layout and pages.
+- `app/`: Next.js App Router root layout, APR catalog, and dynamic APR routes.
   - `app/layout.tsx`: Root HTML shell and page container.
-  - `app/page.tsx`: Main dashboard viewport.
+  - `app/page.tsx`: APR catalog.
+  - `app/aprs/[apr_id]/page.tsx`: Per-APR control room route.
   - `app/globals.css`: Tailwind v4 import directives.
-- `components/`: UI and feature components.
-  - `components/ui/`: Reusable primitive components (e.g., buttons, cards).
-  - `components/*.tsx`: Specific dashboard widgets (e.g., `TrendChart.tsx`, `RecommendationCard.tsx`, `AlertOverview.tsx`).
+- `features/`: Domain-owned components, hooks, types, and transforms.
+  - `features/aprs/`: APR catalog and coverage.
+  - `features/control-room/`: Dashboard composition and orchestration.
+  - `features/telemetry/`: Historical views and transforms.
+  - `features/twin-state/`: Explainable Twin state and translations.
+- `components/ui/`: Reusable stateless primitives.
 - `lib/`: Helper libraries and utilities.
   - `lib/format.ts`: Data localization and display helpers (Spanish/es-CL locale for Chile).
 - `tests/`: Automated test suite using Vitest.

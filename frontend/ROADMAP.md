@@ -8,10 +8,10 @@ This roadmap is scoped to the Next.js frontend and aligns with the [project MVP 
 
 ### 1. Component test coverage
 
-Only `format.ts` and `telemetry.ts` are currently tested. Extend coverage to:
+Transform helpers, API utilities, catalog navigation, and control-room failure states are covered. Extend coverage to:
 
 - React components: `AlertOverview`, `RecommendationCard`, `ExecutiveSummary`
-- SWR hooks in `lib/api.ts`: mock responses, assert loading / error / data states
+- SWR hooks: mock responses and assert cache/revalidation behavior
 - Edge cases: `null` twin state fields, stale data, empty telemetry arrays
 
 Tests should be co-located with their feature once the feature-based structure (item 5) is in place.
@@ -23,17 +23,37 @@ Tests should be co-located with their feature once the feature-based structure (
 - `OperationalSnapshot`: visualize `data_age_minutes` with a freshness indicator (green / yellow / red) instead of plain text.
 - `TrendChart`: add threshold reference lines for pressure and turbidity limits (constants already defined in `lib/constants.ts`).
 
-### 3. Type contract validation
+### 3. Generated API contracts
 
-`constants.ts` mirrors `config.py` and `lib/types.ts` mirrors `schemas.py` — both can drift silently. Add a smoke test that fetches from the live API in CI and asserts critical response fields match the TypeScript interfaces.
+Replace manually mirrored API interfaces with contracts generated from FastAPI's OpenAPI schema.
+
+**Phase 1 — compile-time safety:**
+
+- Add `openapi-typescript` and generate TypeScript definitions from `/openapi.json`.
+- Add `openapi-fetch` as the typed request client beneath the existing feature-scoped SWR hooks.
+- Keep SWR responsible for caching, revalidation, loading, and error state; generated clients must not leak into presentation components.
+- Add scripts such as `api:types` and `api:types:check` so CI fails when the generated contract differs from the committed output.
+- Replace duplicated interfaces in `lib/types.ts` incrementally, starting with `/available_aprs`, `/twin/state`, `/telemetry/recent`, and `/kpis/daily`.
+
+**Phase 2 — runtime safety:**
+
+- Add Zod validation only at critical operational boundaries, initially `/twin/state` and `/available_aprs`.
+- Surface schema failures as explicit API contract errors rather than rendering partially invalid operational data.
+- Keep `constants.ts` synchronized with `config.py` through a separate parity test because operational thresholds are not part of the OpenAPI response schema.
+
+**Acceptance criteria:**
+
+- Frontend API calls reject invalid route parameters and response shapes before reaching UI transforms.
+- A backend schema change causes a deterministic CI failure until generated contracts are refreshed.
+- Existing SWR hooks and feature boundaries remain intact.
 
 ### 4. Auto-refresh
 
 SWR has `revalidateOnFocus: false` everywhere and no polling interval. Add a configurable refresh toggle (e.g. every 30 s) surfaced as a UI control — important for live demo sessions where the backend receives new telemetry.
 
-### 5. Feature-based architecture + App Router pages
+### 5. Feature-based architecture + App Router pages (completed)
 
-The current flat `components/` structure and monolithic `page.tsx` will become a maintenance problem as the app grows. Refactor before adding more surface area.
+Implemented with an APR catalog at `/`, per-APR control rooms at `/aprs/[apr_id]`, and domain-owned components, hooks, and transforms under `features/`.
 
 **Target structure:**
 
@@ -103,6 +123,6 @@ Dedicated section for `reason_codes`, `possible_root_cause`, `hydraulic_risk`, `
 
 Overlay two date ranges on `TrendChart` to contrast normal operation against an anomalous scenario. Directly supports demo storytelling around the scenario library defined in the backend.
 
-### 10. Runtime type safety (Zod)
+### 10. Runtime validation expansion
 
-The `fetcher` in `lib/api/` currently casts responses as `T` with no runtime validation. Introduce Zod schemas that mirror `lib/types.ts` to catch API/frontend schema drift at the network boundary rather than silently consuming malformed data.
+After the critical endpoints in item 3 are stable, extend Zod validation to telemetry and daily KPI payloads. Generate schemas from OpenAPI where practical; do not maintain a second hand-written contract beside generated TypeScript definitions.
