@@ -212,6 +212,32 @@ export const RECOMMENDATION_ES: Record<string, string> = {
     'Confirme la completitud de los KPI diarios antes de usar este estado para decisiones de planificación.',
 };
 
+/** Recommendation translations keyed by stable recommendation codes emitted by the backend
+ * Frontend prefers lookup by code and falls back to text.
+ */
+export const RECOMMENDATION_ES_BY_CODE: Record<string, string> = {
+  RECOMMENDATION_DATA_UNAVAILABLE: 'Valide la disponibilidad de datos antes de emitir decisiones operativas.',
+  RECOMMENDATION_APR_NOT_FOUND: 'Seleccione un APR válido con cobertura de telemetría.',
+  RECOMMENDATION_TELEMETRY_OUTDATED: 'Valide la conectividad de telemetría y opere con confirmación en terreno hasta que se recuperen los datos en vivo.',
+  RECOMMENDATION_PROJECTED_DEPLETION: 'Riesgo de vaciamiento proyectado: verifique el caudal de la bomba, inspeccione pérdidas e inicie control de rellenado a corto plazo.',
+  RECOMMENDATION_PUMP_NO_RECOVERY: 'Bomba activa sin la recuperación esperada: inspeccione la descarga de la bomba, posición de válvulas y posibles fugas.',
+  RECOMMENDATION_DISTRIBUTION_HYDRAULICS: 'Presión baja con almacenamiento normal sugiere pérdidas en distribución; inspeccione válvulas, reductoras de presión y pérdidas en líneas.',
+  RECOMMENDATION_TANK_SENSOR_ERRATIC: 'Señal de estanque errática: valide el estado del sensor de nivel antes de actuar sobre alarmas de tendencia de almacenamiento.',
+  RECOMMENDATION_TANK_DROP_CRITICAL: 'Detección de caída crítica del estanque: investigue consumo anómalo/fugas y estabilice el almacenamiento inmediatamente.',
+  RECOMMENDATION_TANK_DROP_WARN: 'El nivel del estanque cae más rápido de lo esperado: aumente la vigilancia y verifique patrones de consumo anómalos.',
+  RECOMMENDATION_PRESSURE_CRITICAL: 'Escale inmediatamente por presión crítica y estabilice la distribución.',
+  RECOMMENDATION_PRESSURE_LOW: 'Investigue pérdidas de presión y ajuste el bombeo o la operación de válvulas para estabilizar los niveles de servicio.',
+  RECOMMENDATION_TANK_CRITICAL: 'Priorice acciones de rellenado inmediato para evitar riesgo de interrupción del servicio.',
+  RECOMMENDATION_TANK_LOW: 'Prepare rellenado a corto plazo y monitoree el nivel del estanque con mayor frecuencia.',
+  RECOMMENDATION_TURBIDITY_CRITICAL: 'Active la respuesta por incidente de calidad de agua y verifique el desempeño del tratamiento.',
+  RECOMMENDATION_TURBIDITY_HIGH: 'Aumente la vigilancia de calidad del agua y verifique el desempeño del tratamiento.',
+  RECOMMENDATION_DATA_QUALITY_AT_RISK: 'Valide la calidad de los datos de sensores antes de confiar en decisiones operacionales automatizadas.',
+  RECOMMENDATION_DATA_QUALITY_WATCH: 'Revise las tendencias de calidad de datos y confirme la consistencia de la telemetría durante los turnos.',
+  RECOMMENDATION_DATA_QUALITY_UNKNOWN: 'Confirme la completitud de KPI diarios antes de usar este estado para decisiones de planificación.',
+  RECOMMENDATION_TELEMETRY_STALE: 'Mantenga la operación estable y priorice la actualización de telemetría en el próximo ciclo.',
+  RECOMMENDATION_NORMAL_OPERATION: 'Continúe la operación normal con monitoreo de rutina de presión, nivel de estanque y turbidez.',
+};
+
 /**
  * Translates a free-text string by looking it up in the provided dictionary.
  * Falls back to the trimmed original value when no translation is found.

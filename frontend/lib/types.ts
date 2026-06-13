@@ -95,4 +95,5 @@ export interface TwinState {
   operational_recommendation: string | null;
   turbidity_alert_active: boolean;
   active_alerts: string[];
+  recommendation_code: string | null;
 }

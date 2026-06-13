@@ -8,6 +8,7 @@ import {
   CONFIDENCE_ES,
   REASON_CODE_ES,
   RECOMMENDATION_ES,
+  RECOMMENDATION_ES_BY_CODE,
   ROOT_CAUSE_ES,
   t,
 } from '../lib/i18n';
@@ -22,7 +23,12 @@ import {
  * @param twin - Current twin state containing the recommendation, root cause, and alert data.
  */
 export function RecommendationCard({ twin }: { twin: TwinState }) {
-  const recommendation = t(RECOMMENDATION_ES, twin.operational_recommendation);
+  // Prefer translation by stable recommendation_code; fallback a texto traducido o al texto original.
+  const recommendation =
+    (twin.recommendation_code && RECOMMENDATION_ES_BY_CODE[twin.recommendation_code]) ||
+    t(RECOMMENDATION_ES, twin.operational_recommendation) ||
+    twin.operational_recommendation ||
+    '';
   const rootCause = t(ROOT_CAUSE_ES, twin.possible_root_cause);
   const alerts = twin.active_alerts ?? [];
 
