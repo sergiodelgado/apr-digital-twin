@@ -1,13 +1,13 @@
-"use client";
+'use client';
 
-import { AlertOverview } from "@/features/twin-state/components/AlertOverview";
-import { ExecutiveSummary } from "@/features/twin-state/components/ExecutiveSummary";
-import { OperationalSnapshot } from "@/features/twin-state/components/OperationalSnapshot";
-import { RecommendationCard } from "@/features/twin-state/components/RecommendationCard";
-import { IncidentsTable } from "@/features/telemetry/components/IncidentsTable";
-import { RawTelemetry } from "@/features/telemetry/components/RawTelemetry";
-import { TrendChart } from "@/features/telemetry/components/TrendChart";
-import { Section } from "@/components/ui/primitives";
+import { AlertOverview } from '@/features/twin-state/components/AlertOverview';
+import { ExecutiveSummary } from '@/features/twin-state/components/ExecutiveSummary';
+import { OperationalSnapshot } from '@/features/twin-state/components/OperationalSnapshot';
+import { RecommendationCard } from '@/features/twin-state/components/RecommendationCard';
+import { IncidentsTable } from '@/features/telemetry/components/IncidentsTable';
+import { RawTelemetry } from '@/features/telemetry/components/RawTelemetry';
+import { TrendChart } from '@/features/telemetry/components/TrendChart';
+import { Section } from '@/components/ui/primitives';
 import {
   PRESSURE_MAX_BAR,
   PRESSURE_MIN_BAR,
@@ -15,10 +15,19 @@ import {
   TANK_LOW_PCT,
   TURBIDITY_ALERT_NTU,
   TURBIDITY_CRITICAL_NTU,
-} from "@/lib/constants";
-import { useControlRoom } from "../hooks/useControlRoom";
-import { FiltersBar } from "./FiltersBar";
+} from '@/lib/constants';
+import { useControlRoom } from '../hooks/useControlRoom';
+import { FiltersBar } from './FiltersBar';
 
+/**
+ * Client component that renders the full APR operational control room.
+ *
+ * Delegates all data fetching, filter state management, and memoized transforms
+ * to the `useControlRoom` hook. Renders a loading placeholder until the twin state
+ * is available, then shows the full dashboard layout.
+ *
+ * @param aprId - APR identifier forwarded from the Server Component route params.
+ */
 export function ControlRoomView({ aprId }: { aprId: string }) {
   const {
     filters,
@@ -73,7 +82,7 @@ export function ControlRoomView({ aprId }: { aprId: string }) {
             <Section
               title="Tendencias operacionales"
               subtitle={
-                telLoading ? "Actualizando series…" : `${chartData.length} puntos graficados`
+                telLoading ? 'Actualizando series…' : `${chartData.length} puntos graficados`
               }
             >
               <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
@@ -84,8 +93,8 @@ export function ControlRoomView({ aprId }: { aprId: string }) {
                   color="#38bdf8"
                   unit="bar"
                   thresholds={[
-                    { value: PRESSURE_MIN_BAR, label: "mín", color: "#f43f5e" },
-                    { value: PRESSURE_MAX_BAR, label: "máx", color: "#64748b" },
+                    { value: PRESSURE_MIN_BAR, label: 'mín', color: '#f43f5e' },
+                    { value: PRESSURE_MAX_BAR, label: 'máx', color: '#64748b' },
                   ]}
                 />
                 <TrendChart
@@ -95,8 +104,8 @@ export function ControlRoomView({ aprId }: { aprId: string }) {
                   color="#34d399"
                   unit="%"
                   thresholds={[
-                    { value: TANK_LOW_PCT, label: "bajo", color: "#f59e0b" },
-                    { value: TANK_CRITICAL_PCT, label: "crítico", color: "#f43f5e" },
+                    { value: TANK_LOW_PCT, label: 'bajo', color: '#f59e0b' },
+                    { value: TANK_CRITICAL_PCT, label: 'crítico', color: '#f43f5e' },
                   ]}
                 />
                 <TrendChart
@@ -106,8 +115,8 @@ export function ControlRoomView({ aprId }: { aprId: string }) {
                   color="#a78bfa"
                   unit="NTU"
                   thresholds={[
-                    { value: TURBIDITY_ALERT_NTU, label: "alerta", color: "#f59e0b" },
-                    { value: TURBIDITY_CRITICAL_NTU, label: "crítico", color: "#f43f5e" },
+                    { value: TURBIDITY_ALERT_NTU, label: 'alerta', color: '#f59e0b' },
+                    { value: TURBIDITY_CRITICAL_NTU, label: 'crítico', color: '#f43f5e' },
                   ]}
                 />
               </div>
@@ -131,6 +140,10 @@ export function ControlRoomView({ aprId }: { aprId: string }) {
   );
 }
 
+/**
+ * Full-width loading placeholder displayed while the twin state is initializing.
+ * @param message - Spanish loading message shown to the operator.
+ */
 function LoadingBox({ message }: { message: string }) {
   return (
     <div className="flex items-center justify-center rounded-xl border border-border bg-surface/60 p-12 text-sm text-muted">

@@ -1,11 +1,24 @@
-import type { AvailableAPRRecord } from "@/lib/types";
+import type { AvailableAPRRecord } from '@/lib/types';
 
+/** Date range and APR selection filters used by the control-room data hooks. */
 export interface Filters {
   aprId: string | null;
-  startDate: string; // yyyy-mm-dd
-  endDate: string;   // yyyy-mm-dd
+  /** yyyy-mm-dd inclusive start date. */
+  startDate: string;
+  /** yyyy-mm-dd inclusive end date. */
+  endDate: string;
 }
 
+/**
+ * Derives the available date bounds (min/max as yyyy-mm-dd strings) from an APR
+ * record's telemetry and KPI timestamps.
+ *
+ * Considers all four timestamp fields: first/last telemetry and first/last KPI date.
+ * Returns null if the record is undefined or has no date information at all.
+ *
+ * @param apr - The APR catalog record to inspect. May be undefined while the catalog loads.
+ * @returns An object with `min` and `max` date strings, or null.
+ */
 export function dateBoundsFor(
   apr: AvailableAPRRecord | undefined,
 ): { min: string; max: string } | null {

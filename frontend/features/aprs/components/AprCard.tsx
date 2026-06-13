@@ -1,10 +1,17 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { formatDateTime } from "@/lib/format";
-import type { AvailableAPRRecord } from "@/lib/types";
-import { Card } from "@/components/ui/primitives";
+import Link from 'next/link';
+import { formatDateTime } from '@/lib/format';
+import type { AvailableAPRRecord } from '@/lib/types';
+import { Card } from '@/components/ui/primitives';
 
+/**
+ * Clickable card that navigates to the APR control room at `/aprs/{apr_id}`.
+ * Displays the APR identifier, total telemetry and KPI record counts, and the
+ * most recent telemetry timestamp.
+ *
+ * @param apr - The APR catalog record to render.
+ */
 export function AprCard({ apr }: { apr: AvailableAPRRecord }) {
   return (
     <Link href={`/aprs/${apr.apr_id}`}>
@@ -20,7 +27,7 @@ export function AprCard({ apr }: { apr: AvailableAPRRecord }) {
             <dd className="font-medium text-foreground">
               {apr.last_telemetry_timestamp
                 ? formatDateTime(apr.last_telemetry_timestamp)
-                : "—"}
+                : '—'}
             </dd>
           </div>
           <div className="flex justify-between">

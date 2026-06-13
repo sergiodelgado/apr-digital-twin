@@ -1,16 +1,22 @@
-"use client";
+'use client';
 
-import { formatDateTime, formatNumber } from "@/lib/format";
-import { FRESHNESS_ES, SYSTEM_STATUS_ES } from "../lib/i18n";
-import type { TwinState } from "@/lib/types";
-import { Badge, Card, freshnessTone, systemStatusTone } from "@/components/ui/primitives";
+import { formatDateTime, formatNumber } from '@/lib/format';
+import { FRESHNESS_ES, SYSTEM_STATUS_ES } from '../lib/i18n';
+import type { TwinState } from '@/lib/types';
+import { Badge, Card, freshnessTone, systemStatusTone } from '@/components/ui/primitives';
 
+/**
+ * Four-card row showing the current operational status at a glance:
+ * system status badge, data freshness badge with age, last telemetry timestamp, and APR identifier.
+ *
+ * @param twin - Current twin state from the `/twin/state` API endpoint.
+ */
 export function OperationalSnapshot({ twin }: { twin: TwinState }) {
   const age = twin.data_age_minutes;
   const ageLabel =
-    typeof age === "number"
+    typeof age === 'number'
       ? `${formatNumber(age, 1)} min de antigüedad`
-      : "Antigüedad no disponible";
+      : 'Antigüedad no disponible';
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

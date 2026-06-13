@@ -1,10 +1,15 @@
-// Umbrales operacionales — ESPEJO de src/apr_twin/config.py.
-// Mantener sincronizado con el backend; se usan para las líneas de umbral de los
-// gráficos y para la clasificación de severidad en el cliente (paridad con app.py).
+/**
+ * **Operational Thresholds — Mirror of src/apr_twin/config.py.**
+ *
+ * Must be kept synchronized with the backend; used for rendering threshold lines
+ * in charts and for severity classification on the client (parity with app.py).
+ */
 
 export const PRESSURE_MIN_BAR = 1.5;
 export const PRESSURE_MAX_BAR = 4.5;
-export const PRESSURE_CRITICAL_BAR = 1.0; // app.py marca CRITICAL bajo 1.0 bar
+
+/** `app.py` marks CRITICAL below 1.0 bar */
+export const PRESSURE_CRITICAL_BAR = 1.0;
 
 export const TURBIDITY_ALERT_NTU = 2.0;
 export const TURBIDITY_CRITICAL_NTU = 5.0;
@@ -15,12 +20,12 @@ export const TANK_CRITICAL_PCT = 15.0;
 export const FRESHNESS_FRESH_MAX_MINUTES = 15.0;
 export const FRESHNESS_STALE_MAX_MINUTES = 60.0;
 
-// Endpoint del proxy same-origin definido en next.config.ts.
-export const API_BASE = "/api/apr";
+/** Same-origin proxy endpoint defined in `next.config.ts`. */
+export const API_BASE = '/api/apr';
 
-// Máximo de puntos a graficar tras downsampling (rendimiento de Recharts).
+/** Maximum chart points after downsampling (Recharts performance). */
 export const MAX_CHART_POINTS = 600;
 
-// Máximo de filas en la tabla de incidentes y la telemetría cruda.
+/** Maximum incident table and raw telemetry rows. */
 export const MAX_INCIDENT_ROWS = 120;
 export const MAX_RAW_ROWS = 120;
