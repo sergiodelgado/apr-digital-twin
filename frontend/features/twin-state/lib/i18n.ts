@@ -152,6 +152,10 @@ export const ROOT_CAUSE_ES: Record<string, string> = {
  * strings defined in `src/apr_twin/twin/taxonomy.py` and emitted by `engine.py`.
  */
 export const RECOMMENDATION_ES: Record<string, string> = {
+  'Validate data availability before issuing operational decisions.':
+    'Valide la disponibilidad de datos antes de emitir decisiones operacionales.',
+  'Select an APR with telemetry coverage in the current Silver dataset.':
+    'Seleccione un APR con cobertura de telemetría en el conjunto Silver actual.',
   'Select a valid APR ID with Silver telemetry coverage.':
     'Seleccione un APR válido con cobertura de telemetría.',
   'Validate telemetry connectivity and operate with field confirmation until live data recovers.':
@@ -160,14 +164,36 @@ export const RECOMMENDATION_ES: Record<string, string> = {
     'Mantenga la operación estable y priorice la actualización de telemetría en el próximo ciclo.',
   'Projected depletion risk detected: verify pump output, inspect losses, and initiate near-term refill control.':
     'Riesgo de vaciamiento proyectado: verifique el caudal de la bomba, inspeccione pérdidas e inicie control de rellenado a corto plazo.',
+  'Projected depletion with weak recovery trend: verify pump output, check leakage/losses, and initiate near-term refill control.':
+    'Vaciamiento proyectado con recuperación débil: verifique el caudal de la bomba, revise fugas o pérdidas e inicie control de rellenado a corto plazo.',
   'Pump is active without expected recovery: inspect pump discharge, valve positions, and potential leakage.':
     'Bomba activa sin la recuperación esperada: inspeccione la descarga de la bomba, posición de válvulas y posibles fugas.',
+  'Pump is active but tank is not recovering: inspect pump discharge, valve positions, and potential network leakage.':
+    'La bomba está activa pero el estanque no se recupera: inspeccione la descarga, la posición de las válvulas y posibles fugas en la red.',
   'Low pressure with normal storage suggests distribution losses; inspect valves, PRVs, and line losses.':
     'Presión baja con almacenamiento normal sugiere pérdidas en distribución; inspeccione válvulas, reductoras de presión y pérdidas en líneas.',
+  'Low pressure with normal storage points to distribution hydraulics; inspect valves, PRVs, and line losses.':
+    'La presión baja con almacenamiento normal apunta a la red de distribución; inspeccione válvulas, reductoras de presión y pérdidas en líneas.',
   'Hydraulic trend confidence is limited; increase telemetry continuity before acting on balance assumptions.':
     'La confianza en la tendencia hidráulica es limitada; aumente la continuidad de telemetría antes de actuar sobre supuestos de balance.',
   'Erratic tank signal detected: validate level sensor health before acting on storage trend alarms.':
     'Señal de estanque errática: valide el estado del sensor de nivel antes de actuar sobre alarmas de tendencia de almacenamiento.',
+  'Critical tank drop rate detected: investigate abnormal demand/leaks and stabilize storage immediately.':
+    'Se detectó una caída crítica del estanque: investigue demanda anormal o fugas y estabilice el almacenamiento de inmediato.',
+  'Tank is dropping faster than expected: increase surveillance and verify abnormal consumption patterns.':
+    'El estanque desciende más rápido de lo esperado: aumente la vigilancia y verifique patrones de consumo anormales.',
+  'Escalate immediately for critical low pressure and stabilize distribution.':
+    'Escale de inmediato la presión críticamente baja y estabilice la distribución.',
+  'Investigate pressure losses and adjust pumping or valve operations.':
+    'Investigue pérdidas de presión y ajuste el bombeo o la operación de válvulas.',
+  'Prioritize immediate refill actions to avoid service interruption risk.':
+    'Priorice acciones inmediatas de rellenado para evitar riesgo de interrupción del servicio.',
+  'Prepare short-term replenishment and monitor tank level more frequently.':
+    'Prepare el rellenado a corto plazo y monitoree el nivel del estanque con mayor frecuencia.',
+  'Activate water quality incident response and verify treatment performance.':
+    'Active la respuesta ante incidentes de calidad del agua y verifique el desempeño del tratamiento.',
+  'Increase water quality surveillance and inspect treatment conditions.':
+    'Aumente la vigilancia de calidad del agua e inspeccione las condiciones de tratamiento.',
   'Prioritize short-term refill planning and monitor storage trajectory more frequently.':
     'Priorice la planificación de rellenado a corto plazo y monitoree la trayectoria de almacenamiento con mayor frecuencia.',
   'Investigate pressure losses and adjust pumping or valve operations to stabilize service levels.':
@@ -182,6 +208,8 @@ export const RECOMMENDATION_ES: Record<string, string> = {
     'Continúe la operación normal con monitoreo de rutina de presión, nivel de estanque y turbidez.',
   'Review data quality trends and confirm telemetry consistency during shifts.':
     'Revise las tendencias de calidad de datos y confirme la consistencia de la telemetría durante los turnos.',
+  'Confirm daily KPI completeness before using this state for planning decisions.':
+    'Confirme la completitud de los KPI diarios antes de usar este estado para decisiones de planificación.',
 };
 
 /**

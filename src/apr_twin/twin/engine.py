@@ -28,6 +28,7 @@ from apr_twin.twin.taxonomy import (
     HYDRAULIC_HIGH_RISK_REASON_CODES,
     HYDRAULIC_MEDIUM_RISK_REASON_CODES,
     ReasonCode,
+    RecommendationText,
     derive_main_root_cause,
     recommendation_for_root_cause,
 )
@@ -253,48 +254,42 @@ def _build_operational_recommendation(
     possible_root_cause: str | None,
 ) -> str:
     if freshness_status == "OUTDATED":
-        return "Validate telemetry connectivity and operate with field confirmation until live data recovers."
+        return RecommendationText.TELEMETRY_OUTDATED
     if projected_depletion_insufficient_recovery:
-        return (
-            "Projected depletion with weak recovery trend: verify pump output, check leakage/losses, "
-            "and initiate near-term refill control."
-        )
+        return RecommendationText.PROJECTED_DEPLETION
     if pump_on_no_recovery:
-        return (
-            "Pump is active but tank is not recovering: inspect pump discharge, valve positions, "
-            "and potential network leakage."
-        )
+        return RecommendationText.PUMP_NO_RECOVERY
     if low_pressure_with_normal_storage:
-        return "Low pressure with normal storage points to distribution hydraulics; inspect valves, PRVs, and line losses."
+        return RecommendationText.DISTRIBUTION_HYDRAULICS
     if tank_sensor_erratic:
-        return "Erratic tank signal detected: validate level sensor health before acting on storage trend alarms."
+        return RecommendationText.TANK_SENSOR_ERRATIC
     if abnormal_drop_critical:
-        return "Critical tank drop rate detected: investigate abnormal demand/leaks and stabilize storage immediately."
+        return RecommendationText.TANK_DROP_CRITICAL
     if abnormal_drop_warn:
-        return "Tank is dropping faster than expected: increase surveillance and verify abnormal consumption patterns."
+        return RecommendationText.TANK_DROP_WARN
     if pressure_critical:
-        return "Escalate immediately for critical low pressure and stabilize distribution."
+        return RecommendationText.PRESSURE_CRITICAL
     if pressure_low:
-        return "Investigate pressure losses and adjust pumping or valve operations."
+        return RecommendationText.PRESSURE_LOW
     if tank_critical or projected_tank_critical:
-        return "Prioritize immediate refill actions to avoid service interruption risk."
+        return RecommendationText.TANK_CRITICAL
     if tank_low or projected_tank_low:
-        return "Prepare short-term replenishment and monitor tank level more frequently."
+        return RecommendationText.TANK_LOW
     if turbidity_critical:
-        return "Activate water quality incident response and verify treatment performance."
+        return RecommendationText.TURBIDITY_CRITICAL
     if turbidity_high:
-        return "Increase water quality surveillance and inspect treatment conditions."
+        return RecommendationText.TURBIDITY_HIGH
     if data_completeness_state == "AT_RISK":
-        return "Validate sensor data quality before relying on automated operational decisions."
+        return RecommendationText.DATA_QUALITY_AT_RISK
     if data_completeness_state == "WATCH":
-        return "Review data quality trends and confirm telemetry consistency during shifts."
+        return RecommendationText.DATA_QUALITY_WATCH
     if data_completeness_state == "UNKNOWN":
-        return "Confirm daily KPI completeness before using this state for planning decisions."
+        return RecommendationText.DATA_QUALITY_UNKNOWN
     if freshness_status == "STALE":
-        return "Keep operations stable and prioritize telemetry refresh in the next cycle."
+        return RecommendationText.TELEMETRY_STALE
     if hydraulic_risk in {"MEDIUM", "HIGH"} and possible_root_cause:
         return f"Hydraulic inconsistency detected. Likely cause: {possible_root_cause}"
-    return "Continue normal operation with routine monitoring of pressure, tank level, and turbidity."
+    return RecommendationText.NORMAL_OPERATION
 
 
 def _compute_confidence_score(
@@ -361,7 +356,7 @@ def _empty_state(
     apr_id: str | None,
     *,
     reason_code: str = ReasonCode.TELEMETRY_NO_DATA,
-    recommendation: str = "Validate data availability before issuing operational decisions.",
+    recommendation: str = RecommendationText.DATA_UNAVAILABLE,
 ) -> TwinState:
     reason_codes = [reason_code] if reason_code else []
     return TwinState(
@@ -408,7 +403,7 @@ def compute_current_state(apr_id: str | None = None) -> TwinState:
         return _empty_state(
             selected_apr,
             reason_code=ReasonCode.APR_NOT_FOUND,
-            recommendation="Select an APR with telemetry coverage in the current Silver dataset.",
+            recommendation=RecommendationText.APR_NOT_FOUND,
         )
 
     latest = apr_df.iloc[-1]
@@ -632,4 +627,3 @@ def compute_current_state(apr_id: str | None = None) -> TwinState:
         turbidity_alert_active=current_turbidity > TURBIDITY_ALERT_NTU,
         active_alerts=alerts,
     )
-

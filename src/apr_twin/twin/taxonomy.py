@@ -101,6 +101,74 @@ class RootCause:
     NORMAL_OPERATION = "NORMAL_OPERATION"
 
 
+class RecommendationText:
+    DATA_UNAVAILABLE = "Validate data availability before issuing operational decisions."
+    APR_NOT_FOUND = "Select an APR with telemetry coverage in the current Silver dataset."
+    TELEMETRY_OUTDATED = (
+        "Validate telemetry connectivity and operate with field confirmation until live data recovers."
+    )
+    PROJECTED_DEPLETION = (
+        "Projected depletion with weak recovery trend: verify pump output, check leakage/losses, "
+        "and initiate near-term refill control."
+    )
+    PUMP_NO_RECOVERY = (
+        "Pump is active but tank is not recovering: inspect pump discharge, valve positions, "
+        "and potential network leakage."
+    )
+    DISTRIBUTION_HYDRAULICS = (
+        "Low pressure with normal storage points to distribution hydraulics; inspect valves, PRVs, "
+        "and line losses."
+    )
+    TANK_SENSOR_ERRATIC = (
+        "Erratic tank signal detected: validate level sensor health before acting on storage trend alarms."
+    )
+    TANK_DROP_CRITICAL = (
+        "Critical tank drop rate detected: investigate abnormal demand/leaks and stabilize storage immediately."
+    )
+    TANK_DROP_WARN = (
+        "Tank is dropping faster than expected: increase surveillance and verify abnormal consumption patterns."
+    )
+    PRESSURE_CRITICAL = "Escalate immediately for critical low pressure and stabilize distribution."
+    PRESSURE_LOW = "Investigate pressure losses and adjust pumping or valve operations."
+    TANK_CRITICAL = "Prioritize immediate refill actions to avoid service interruption risk."
+    TANK_LOW = "Prepare short-term replenishment and monitor tank level more frequently."
+    TURBIDITY_CRITICAL = "Activate water quality incident response and verify treatment performance."
+    TURBIDITY_HIGH = "Increase water quality surveillance and inspect treatment conditions."
+    DATA_QUALITY_AT_RISK = (
+        "Validate sensor data quality before relying on automated operational decisions."
+    )
+    DATA_QUALITY_WATCH = "Review data quality trends and confirm telemetry consistency during shifts."
+    DATA_QUALITY_UNKNOWN = "Confirm daily KPI completeness before using this state for planning decisions."
+    TELEMETRY_STALE = "Keep operations stable and prioritize telemetry refresh in the next cycle."
+    NORMAL_OPERATION = (
+        "Continue normal operation with routine monitoring of pressure, tank level, and turbidity."
+    )
+
+
+ENGINE_RECOMMENDATION_CATALOG: Final[tuple[str, ...]] = (
+    RecommendationText.DATA_UNAVAILABLE,
+    RecommendationText.APR_NOT_FOUND,
+    RecommendationText.TELEMETRY_OUTDATED,
+    RecommendationText.PROJECTED_DEPLETION,
+    RecommendationText.PUMP_NO_RECOVERY,
+    RecommendationText.DISTRIBUTION_HYDRAULICS,
+    RecommendationText.TANK_SENSOR_ERRATIC,
+    RecommendationText.TANK_DROP_CRITICAL,
+    RecommendationText.TANK_DROP_WARN,
+    RecommendationText.PRESSURE_CRITICAL,
+    RecommendationText.PRESSURE_LOW,
+    RecommendationText.TANK_CRITICAL,
+    RecommendationText.TANK_LOW,
+    RecommendationText.TURBIDITY_CRITICAL,
+    RecommendationText.TURBIDITY_HIGH,
+    RecommendationText.DATA_QUALITY_AT_RISK,
+    RecommendationText.DATA_QUALITY_WATCH,
+    RecommendationText.DATA_QUALITY_UNKNOWN,
+    RecommendationText.TELEMETRY_STALE,
+    RecommendationText.NORMAL_OPERATION,
+)
+
+
 ROOT_CAUSE_RULES: Final[tuple[tuple[str, frozenset[str]], ...]] = (
     (RootCause.APR_SELECTION_INVALID, frozenset({ReasonCode.APR_NOT_FOUND})),
     (
