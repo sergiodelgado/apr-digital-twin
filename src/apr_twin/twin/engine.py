@@ -29,6 +29,7 @@ from apr_twin.twin.taxonomy import (
     HYDRAULIC_MEDIUM_RISK_REASON_CODES,
     ReasonCode,
     RecommendationText,
+    RECOMMENDATION_TEXT_TO_CODE,
     derive_main_root_cause,
     recommendation_for_root_cause,
 )
@@ -359,6 +360,9 @@ def _empty_state(
     recommendation: str = RecommendationText.DATA_UNAVAILABLE,
 ) -> TwinState:
     reason_codes = [reason_code] if reason_code else []
+    # Map canonical recommendation text to a stable recommendation code for frontend translation.
+    recommendation_code = RECOMMENDATION_TEXT_TO_CODE.get(recommendation)
+
     return TwinState(
         timestamp=datetime.now(),
         apr_id=apr_id or "UNKNOWN",
@@ -371,6 +375,7 @@ def _empty_state(
         possible_root_cause="No telemetry available to infer hydraulic behavior.",
         reason_codes=reason_codes,
         operational_recommendation=recommendation,
+        recommendation_code=recommendation_code,
         active_alerts=["No Silver telemetry data available."],
     )
 
@@ -604,6 +609,9 @@ def compute_current_state(apr_id: str | None = None) -> TwinState:
         possible_root_cause=possible_root_cause,
     )
 
+    # Map the textual operational recommendation to a canonical recommendation code when possible
+    recommendation_code = RECOMMENDATION_TEXT_TO_CODE.get(operational_recommendation)
+
     return TwinState(
         timestamp=latest_ts.to_pydatetime(),
         apr_id=selected_apr,
@@ -624,6 +632,7 @@ def compute_current_state(apr_id: str | None = None) -> TwinState:
         possible_root_cause=possible_root_cause,
         reason_codes=reason_codes,
         operational_recommendation=operational_recommendation,
+        recommendation_code=recommendation_code,
         turbidity_alert_active=current_turbidity > TURBIDITY_ALERT_NTU,
         active_alerts=alerts,
     )
