@@ -1,15 +1,36 @@
-"use client";
+'use client';
 
-import { formatDateTime } from "@/lib/format";
-import { Badge, Card } from "@/components/ui/primitives";
-import type { Incident, Severity } from "../types";
+import type { ReactNode } from 'react';
+import { formatDateTime } from '@/lib/format';
+import { SEVERITY_ES } from '@/lib/i18n';
+import { Badge, Card } from '@/components/ui/primitives';
+import type { Incident } from '../types';
 
-const SEVERITY_LABEL: Record<Severity, string> = {
-  OK: "OK",
-  WARNING: "Advertencia",
-  CRITICAL: "Crítica",
-};
+/** Column definition for the incidents table. */
+interface Column {
+  header: string;
+  className: string;
+  render: (inc: Incident) => ReactNode;
+}
 
+/** Column definitions driving both the header row and all data cells. */
+const COLUMNS: Column[] = [
+  { header: 'Marca temporal', className: 'text-muted',               render: (inc) => formatDateTime(inc.timestamp) },
+  { header: 'Evento',         className: 'text-foreground',          render: (inc) => inc.event },
+  { header: 'Severidad',      className: '',                         render: (inc) => <Badge tone={inc.severity}>{SEVERITY_ES[inc.severity]}</Badge> },
+  { header: 'Valor observado', className: 'font-medium text-foreground', render: (inc) => inc.observedValue },
+  { header: 'Umbral',         className: 'text-muted',               render: (inc) => inc.threshold },
+];
+
+/**
+ * Scrollable table of threshold-crossing incidents, sorted by severity (CRITICAL first)
+ * then by descending timestamp within each severity tier.
+ *
+ * Shows a green empty-state message when no incidents were detected in the selected window.
+ * Row count is capped at MAX_INCIDENT_ROWS by the upstream `buildIncidents` transform.
+ *
+ * @param incidents - Incident array produced by `buildIncidents`.
+ */
 export function IncidentsTable({ incidents }: { incidents: Incident[] }) {
   if (incidents.length === 0) {
     return (
@@ -27,11 +48,9 @@ export function IncidentsTable({ incidents }: { incidents: Incident[] }) {
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-surface-2 text-left text-xs uppercase tracking-wide text-muted">
             <tr>
-              <th className="px-4 py-3 font-medium">Marca temporal</th>
-              <th className="px-4 py-3 font-medium">Evento</th>
-              <th className="px-4 py-3 font-medium">Severidad</th>
-              <th className="px-4 py-3 font-medium">Valor observado</th>
-              <th className="px-4 py-3 font-medium">Umbral</th>
+              {COLUMNS.map((col) => (
+                <th key={col.header} className="px-4 py-3 font-medium">{col.header}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -40,13 +59,11 @@ export function IncidentsTable({ incidents }: { incidents: Incident[] }) {
                 key={`${inc.timestamp}-${inc.event}-${i}`}
                 className="border-t border-border/60 hover:bg-surface-2/50"
               >
-                <td className="px-4 py-2.5 text-muted">{formatDateTime(inc.timestamp)}</td>
-                <td className="px-4 py-2.5 text-foreground">{inc.event}</td>
-                <td className="px-4 py-2.5">
-                  <Badge tone={inc.severity}>{SEVERITY_LABEL[inc.severity]}</Badge>
-                </td>
-                <td className="px-4 py-2.5 font-medium text-foreground">{inc.observedValue}</td>
-                <td className="px-4 py-2.5 text-muted">{inc.threshold}</td>
+                {COLUMNS.map((col) => (
+                  <td key={col.header} className={`px-4 py-2.5 ${col.className}`}>
+                    {col.render(inc)}
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>
