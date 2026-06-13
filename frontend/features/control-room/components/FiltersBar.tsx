@@ -1,12 +1,19 @@
-"use client";
+import type { Filters } from '@/features/aprs/types';
 
-import type { Filters } from "@/features/aprs/types";
+/** Shared Tailwind class string for the date picker inputs. */
+const INPUT_CLS = 'rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-foreground outline-none focus:border-sky-500 scheme-dark';
 
-export function FiltersBar({
-  filters,
-  bounds,
-  onChange,
-}: {
+/**
+ * Date range filter bar for the APR control-room view.
+ *
+ * Renders two date inputs (start/end) constrained to the APR's available data bounds.
+ * APR selection is handled at the route level; this component only manages the time window.
+ *
+ * @param filters - Current filter values including the active date range.
+ * @param bounds - Available date range for the selected APR, or null while loading.
+ * @param onChange - Callback invoked with the updated Filters when either date changes.
+ */
+export function FiltersBar({ filters, bounds, onChange }: {
   filters: Filters;
   bounds: { min: string; max: string } | null;
   onChange: (next: Filters) => void;
@@ -21,7 +28,7 @@ export function FiltersBar({
           min={bounds?.min}
           max={filters.endDate || bounds?.max}
           onChange={(e) => onChange({ ...filters, startDate: e.target.value })}
-          className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-foreground outline-none focus:border-sky-500 [color-scheme:dark]"
+          className={INPUT_CLS}
         />
       </label>
 
@@ -33,7 +40,7 @@ export function FiltersBar({
           min={filters.startDate || bounds?.min}
           max={bounds?.max}
           onChange={(e) => onChange({ ...filters, endDate: e.target.value })}
-          className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-foreground outline-none focus:border-sky-500 [color-scheme:dark]"
+          className={INPUT_CLS}
         />
       </label>
 
